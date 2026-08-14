@@ -163,11 +163,11 @@ test("parseSherpaText：无时间戳回退为单段", () => {
   assert.deepEqual(parseSherpaText(""), []);
 });
 
-test("resolveVisionModel：低中两档映射与显式名透传", () => {
+test("resolveVisionModel：低中高三档映射与显式名透传", () => {
   assert.equal(resolveVisionModel("low"), "qwen3-vl:2b");
-  assert.equal(resolveVisionModel("medium"), "qwen3-vl:8b");
-  assert.equal(resolveVisionModel("high"), "qwen3-vl:8b", "retired high tier falls back to medium");
-  assert.equal(resolveVisionModel("large"), "qwen3-vl:8b", "retired large tier falls back to medium");
+  assert.equal(resolveVisionModel("medium"), "qwen3-vl:4b");
+  assert.equal(resolveVisionModel("high"), "qwen3-vl:8b");
+  assert.equal(resolveVisionModel("large"), "qwen3-vl:8b", "large alias -> 8b");
   assert.equal(resolveVisionModel("qwen3-vl:4b"), "qwen3-vl:4b", "explicit 4b tag kept");
   assert.equal(resolveVisionModel("minicpm-v"), "minicpm-v", "explicit name kept");
   assert.equal(resolveVisionModel("gpt-4o-mini"), "gpt-4o-mini", "cloud id kept");
@@ -177,7 +177,7 @@ test("resolveVisionModel：低中两档映射与显式名透传", () => {
 test("buildVisionRequest：base64 data URL + model/prompt + apiKey header", () => {
   const bytes = Buffer.from("fakejpeg");
   const req = buildVisionRequest(bytes, { model: "medium", prompt: "", apiKey: "" });
-  assert.equal(req.body.model, "qwen3-vl:8b", "tier resolved");
+  assert.equal(req.body.model, "qwen3-vl:4b", "tier resolved (medium -> 4b)");
   assert.ok(req.body.messages[0].content[1].image_url.url.startsWith("data:image/jpeg;base64,"), "data url");
   assert.equal(req.body.messages[0].content[1].image_url.url, "data:image/jpeg;base64," + bytes.toString("base64"), "base64 correct");
   assert.equal(req.body.messages[0].content[0].text, DEFAULT_VISION_PROMPT, "default prompt used");
@@ -212,9 +212,12 @@ test("resolveVisionPrompt：优先级链与分模型选择", () => {
   const en = resolveVisionPrompt("moondream2", "", {});
   assert.ok(/citation: suitable/i.test(en), "moondream2 gets english prompt");
   // 用户覆盖优先级：显式模型名 > 档位 > 全局
-  assert.equal(resolveVisionPrompt("qwen3-vl:8b", "全局覆盖", {}), "全局覆盖");
-  assert.equal(resolveVisionPrompt("qwen3-vl:8b", "全局覆盖", { medium: "档位覆盖" }), "档位覆盖");
+  assert.equal(resolveVisionPrompt("qwen3-vl:4b", "全局覆盖", {}), "全局覆盖");
+  assert.equal(resolveVisionPrompt("qwen3-vl:4b", "全局覆盖", { medium: "档位覆盖" }), "档位覆盖");
   assert.equal(resolveVisionPrompt("qwen3-vl:8b", "全局覆盖", { "qwen3-vl:8b": "精确覆盖" }), "精确覆盖");
+  // 数字边界回归：32b 不得被 "2b" 子串误判为低档（不应拿到短提示词）
+  assert.equal(resolveVisionPrompt("qwen3-vl:32b", "", {}), DEFAULT_VISION_PROMPT, "32b -> detailed prompt, not short");
+  assert.equal(resolveVisionPrompt("medium", "", {}), DEFAULT_VISION_PROMPT, "4b medium -> detailed prompt");
 });
 
 test("resolveVisionPrompt：内容理解而非逐字转录（无 OCR 指令）", () => {
