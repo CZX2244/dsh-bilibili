@@ -11,7 +11,7 @@ DeepSeek Harness 工具插件：给 Agent 添加 `bilibili_extract` 工具。发
 ## ✨ 特性
 
 - **文字信息全量提取**：元数据、完整字幕文稿（带时间戳）、热门评论（含楼中楼）、弹幕（高频 + 时间线样本）；**无字幕轨的视频默认用必剪 ASR 转写**（B站播放器「实时AI字幕」同款能力，匿名可用，24h 缓存），也可切换到本地引擎——**sherpa-onnx（中文推荐，SenseVoice）** 或 **whisper.cpp**（通用），离线可用、适配不同配置；单个信息源失败不影响整体（各自降级为空并带 note）；
-- **可选帧图视觉描述**：无视觉能力的主模型也能「看到」画面——帧图可交给本地 **Ollama / llama.cpp**（三档 Qwen3-VL：2B/8B/32B）或任意 OpenAI 兼容视觉接口转成文字描述，报告按需引用配图；
+- **可选帧图视觉描述**：无视觉能力的主模型也能「看到」画面——帧图可交给本地 **Ollama / llama.cpp**（Qwen3-VL 2B/8B 两档，另可选 4B）或任意 OpenAI 兼容视觉接口转成文字描述，报告按需引用配图；
 - **混合信号自动选帧**：画面场景切换检测（主信号）+ 字幕视觉暗示词（加权）+ 均匀间隔兜底，5 秒去重；
 - **两段式工作流**：模型先读文稿（秒级、零下载），再带 `timestamps` 定向抓帧——每帧自动配附近字幕，视频 24h 缓存复用，多轮迭代不重复下载；
 - **输出模板可替换**：内置简洁总结模板（省时 + 可转发），`summaryTemplate` 配置可指向任意自定义模板文件；
@@ -99,10 +99,10 @@ dsh plugin --profile web add ./dsh-bilibili
         whisperThreads: 0            # whisper CPU 线程数（0=自动）
         visionProvider: 'none'        # 帧图视觉描述：none(默认) | ollama | llama-cpp | openai-compatible
         visionBaseUrl: ''             # 视觉服务地址，留空且 ollama = http://localhost:11434/v1
-        visionModel: 'medium'         # 三档：low(2B) / medium(8B) / high(32B)，或显式模型名
+        visionModel: 'medium'         # 两档：low(2B) / medium(8B)，或显式模型名（如 qwen3-vl:4b）
         visionApiKey: ''              # 云端视觉 API Key（本地留空）
         visionPrompt: ''              # 识图提示词（留空 = 按模型自动选内置提示词）
-        visionPromptByModel: {}       # 分模型提示词覆盖（显式模型名 / low / medium / high）
+        visionPromptByModel: {}       # 分模型提示词覆盖（显式模型名 / low / medium）
         visionMaxFrames: 4            # 最多描述几张帧（控延迟）
         framesDir: ''                # 帧图输出目录，留空 = 系统临时目录/dsh-bilibili/<bvid>
         summaryTemplate: ''          # 输出模板路径，留空 = 内置 templates/summary.md
@@ -153,23 +153,27 @@ DeepSeek 主模型没有视觉能力时，可开启本功能：抓帧后把每�
 |------|-------------|-------------|---------------|------|
 | 低 | `low` | `qwen3-vl:2b` | ~2 GB | 低配电脑 |
 | 中 | `medium`（默认） | `qwen3-vl:8b` | ~6-8 GB | 主流电脑（推荐） |
-| 高 | `high` | `qwen3-vl:32b` | ~20 GB / 建议 GPU | 高配，质量最佳 |
+
+低配想要更好一点的效果可显式填 `qwen3-vl:4b`（~4 GB）；想要更大模型直接填显式模型名（如 `qwen3-vl:32b`），插件原样透传——只是不再作为默认档位推荐。
 
 中档备选 **MiniCPM-V 4.0**（面壁，2026 年新作，官方称超越 GPT-4.1-mini、手机可跑，官方提供 GGUF/int4；其 Ollama tag 名称请以官方库为准）。`visionModel` 也接受显式模型名（Ollama tag 或云端模型 id）。
 
-> 选型依据：本任务是「**理解画面内容 + 输出配图建议**」而非 OCR 转录，权重放在**中文场景理解与指令遵循**上，因此默认三档用同族 Qwen3-VL（行为一致、提示词可共用）；追求极致端侧省资源可选 MiniCPM-V 4.0。
+**其他非千问模型（2026-08 已在 Ollama 官方库核实）**：`minicpm-v:8b`（面壁 MiniCPM-V 2.6，中文 OCR 强）、`moondream`（1.9B，英文为主）、`gemma3n`（谷歌，英文为主）。**Kimi-VL / InternVL / GLM-4V 暂不在 Ollama 官方库**——可通过 llama.cpp 的社区 GGUF 或云端 OpenAI 兼容接口（如 Moonshot/智谱 API）使用；MiniCPM-V 4.0 官方 GGUF 走 llama-cpp 路线即可。
 
-**llama.cpp（本地备选）**：用 `llama-server` 启动视觉 GGUF（模型 + mmproj），它自带 OpenAI 兼容接口：
+> 选型依据：本任务是「**理解画面内容 + 输出配图建议**」而非 OCR 转录，权重放在**中文场景理解与指令遵循**上，因此默认两档用同族 Qwen3-VL（行为一致、提示词可共用）；追求极致端侧省资源可选 MiniCPM-V 4.0。
+
+**llama.cpp（本地备选）**：用 `llama-server` 启动视觉 GGUF（模型 + mmproj），它自带 OpenAI 兼容接口；`visionModel` 就是启动时 `--alias` 设置的名字——把别名设成档位关键词对应的名字，即可直接复用档位配置：
 
 ```sh
-llama-server -m qwen2.5-vl-7b-q4_k_m.gguf --mmproj mmproj-qwen2.5-vl-7b-f16.gguf --port 8080
+llama-server -m qwen3-vl-8b-q4_k_m.gguf --mmproj mmproj-qwen3-vl-8b.gguf --port 8080 --alias qwen3-vl:8b
+# 插件配置：visionProvider: 'llama-cpp' + visionModel: 'medium'
 ```
 
-配置 `visionProvider: 'llama-cpp'`（默认地址 http://localhost:8080/v1）即可。llama.cpp 支持的视觉模型：Qwen2-VL / Qwen2.5-VL / Qwen3-VL（视版本）、MiniCPM-V（含 4.0）、InternVL、GLM-4V、LLaVA、moondream2 等（GGUF 可在 HuggingFace 下载）。中文推荐 Qwen3-VL 系列 GGUF 或 **MiniCPM-V 4.0**（官方 GGUF，端侧优化、中文 OCR 强）。
+两档推荐以**千问 Qwen3-VL 为主**：低档 Qwen3-VL-2B（GGUF 约 2-3 GB）；中档 Qwen3-VL-8B（GGUF 约 5-6 GB）。ModelScope 已核实存在 Qwen3-VL-2B/8B 权重；若所用 llama.cpp 版本暂不支持 Qwen3-VL 架构，可先改用 Qwen2.5-VL-7B-Instruct-GGUF（ModelScope 官方）。llama.cpp 还支持 MiniCPM-V（含 4.0）、InternVL、GLM-4V、LLaVA、gemma3n、moondream2 等架构。
 
 **云端**：任何 OpenAI 兼容接口，例如 `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel` + `visionApiKey`。单帧描述任务不需要旗舰多模态，便宜档即可：GLM-4V-Flash（中文有免费额度）/ GPT-4o-mini / 硅基流动 Qwen-VL 系列。
 
-**分模型提示词**：所有内置提示词的任务都是**理解这一帧的内容**（画面里发生了什么、展示了什么），文字只转述要点、不做逐字转录。插件会按模型自动选提示词：MiniCPM-V 家族有专属提示词、moondream2 用英文提示词、低档小模型用更短的提示词；你也可以用 `visionPrompt`（全局）或 `visionPromptByModel`（按显式模型名或档位 low/medium/high）覆盖。
+**分模型提示词**：所有内置提示词的任务都是**理解这一帧的内容**（画面里发生了什么、展示了什么），文字只转述要点、不做逐字转录。插件会按模型自动选提示词：MiniCPM-V 家族有专属提示词、moondream2 用英文提示词、低档小模型用更短的提示词；你也可以用 `visionPrompt`（全局）或 `visionPromptByModel`（按显式模型名或档位 low/medium）覆盖。
 
 **配图质量把关**：视觉描述末尾会要求模型输出「配图建议：适合/不适合」（适合=画面清晰、信息明确、能帮助读者理解；不适合=纯口播/模糊/无信息量）。帧数据带 `citation_hint` 字段，总结报告**只引用「适合」的帧**，每段至多 1-2 张。
 

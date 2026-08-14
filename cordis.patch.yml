@@ -53,13 +53,13 @@
         visionProvider: 'none'
         # 视觉服务地址：留空且 ollama = http://localhost:11434/v1；云端填厂商 OpenAI 兼容地址
         visionBaseUrl: ''
-        # 视觉模型三档：low(qwen3-vl:2b) / medium(qwen3-vl:8b,默认) / high(qwen3-vl:32b)；或显式模型名（如 minicpm-v、gpt-4o-mini）
+        # 视觉模型两档：low(qwen3-vl:2b) / medium(qwen3-vl:8b,默认)；或显式模型名（如 qwen3-vl:4b、minicpm-v、gpt-4o-mini）
         visionModel: 'medium'
         # 云端视觉服务的 API Key（本地 Ollama 留空）
         visionApiKey: ''
         # 识图提示词（留空 = 按模型自动选内置提示词）
         visionPrompt: ''
-        # 分模型提示词覆盖（可选，如 { 'qwen3-vl:2b': '自定义...', 'minicpm-v': '自定义...' }）；按 显式模型名 > 档位名(low/medium/high) > 全局 visionPrompt 的优先级生效
+        # 分模型提示词覆盖（可选，如 { 'qwen3-vl:2b': '自定义...', 'minicpm-v': '自定义...' }）；按 显式模型名 > 档位名(low/medium) > 全局 visionPrompt 的优先级生效
         visionPromptByModel: {}
         # 最多描述几张帧（1-20，默认 4，控延迟）
         visionMaxFrames: 4

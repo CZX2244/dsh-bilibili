@@ -163,10 +163,12 @@ test("parseSherpaText：无时间戳回退为单段", () => {
   assert.deepEqual(parseSherpaText(""), []);
 });
 
-test("resolveVisionModel：低中高三档映射与显式名透传", () => {
+test("resolveVisionModel：低中两档映射与显式名透传", () => {
   assert.equal(resolveVisionModel("low"), "qwen3-vl:2b");
   assert.equal(resolveVisionModel("medium"), "qwen3-vl:8b");
-  assert.equal(resolveVisionModel("high"), "qwen3-vl:32b");
+  assert.equal(resolveVisionModel("high"), "qwen3-vl:8b", "retired high tier falls back to medium");
+  assert.equal(resolveVisionModel("large"), "qwen3-vl:8b", "retired large tier falls back to medium");
+  assert.equal(resolveVisionModel("qwen3-vl:4b"), "qwen3-vl:4b", "explicit 4b tag kept");
   assert.equal(resolveVisionModel("minicpm-v"), "minicpm-v", "explicit name kept");
   assert.equal(resolveVisionModel("gpt-4o-mini"), "gpt-4o-mini", "cloud id kept");
   assert.equal(resolveVisionModel(""), undefined, "empty -> undefined");
