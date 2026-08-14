@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak } from "../lib/extractor.js";
 import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
@@ -204,6 +204,13 @@ test("resolveVisionBaseUrl：provider 默认地址与显式地址", () => {
   assert.equal(resolveVisionBaseUrl("llama-cpp", ""), "http://localhost:8080/v1", "llama-cpp default");
   assert.equal(resolveVisionBaseUrl("openai-compatible", ""), "", "cloud needs explicit url");
   assert.equal(resolveVisionBaseUrl("ollama", "http://10.0.0.5:9999/v1/"), "http://10.0.0.5:9999/v1", "explicit url kept, trailing slash trimmed");
+});
+
+test("pickNearestPeak：取距离中心最近的场景峰", () => {
+  const peaks = [{ time: 10 }, { time: 13.2 }, { time: 16 }];
+  assert.equal(pickNearestPeak(peaks, 14).time, 13.2, "nearest peak picked");
+  assert.equal(pickNearestPeak([], 14), null, "empty -> null");
+  assert.equal(pickNearestPeak(peaks, NaN), null, "bad center -> null");
 });
 
 test("capTranscriptSmart：长文稿保骨架（前部完整 + 时间索引）", () => {

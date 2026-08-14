@@ -59,7 +59,7 @@ dsh plugin --profile web add ./dsh-bilibili
 ```
 ① bilibili_extract(url, extract_frames: false)      # 只拿文字，秒级、零下载
 ② agent 逐段检查文稿的「信息缺失」位置，确定必须看画面的时间点
-③ agent 在回复末尾以 [建议抓帧] mm:ss 理由 列出清单，再带 timestamps 定向抓帧
+③ agent 在回复末尾以 [建议抓帧] mm:ss 理由 列出清单，再带 timestamps 定向抓帧——插件会在每个时间点附近 ±4s 内用 FFmpeg 场景检测**对齐到画面变化最明显的帧**（语义定位 + 画面信号精修）
 ④ 依据帧的 description/citation_hint（或 read_image）判断报告里引用哪些图
 ```
 
