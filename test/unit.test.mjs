@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectKeyframeTimestamps, formatTime, detectGapCandidates } from "../lib/keyframes.js";
+import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
 import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT } from "../lib/extractor.js";
 import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks } from "../lib/format.js";
 
@@ -19,24 +19,27 @@ const SCENE_PEAKS = [
   { time: 60, reason: "scene change", text: "" },
 ];
 
-test("混合选帧：字幕命中保留", () => {
+test("自动选帧：场景峰保留 + 排序 + 封顶", () => {
   const plan = selectKeyframeTimestamps(SUBTITLE_SEGS, 120, 5, SCENE_PEAKS);
-  assert.ok(plan.some((p) => p.reason.includes("如图")), "subtitle hit kept");
-});
-
-test("混合选帧：场景峰合并 + 5 秒去重", () => {
-  const plan = selectKeyframeTimestamps(SUBTITLE_SEGS, 120, 5, SCENE_PEAKS);
-  assert.ok(plan.some((p) => p.reason === "scene change"), "scene peak merged");
-  assert.ok(!plan.some((p) => Math.abs(p.time - 33) < 0.1), "33s peak within 5s of subtitle hit dropped");
+  assert.equal(plan.length, 5, "capped at maxFrames");
+  assert.ok(plan.some((p) => p.reason === "scene change"), "scene peaks kept");
   for (let i = 1; i < plan.length; i++) {
     assert.ok(plan[i].time > plan[i - 1].time, "sorted ascending");
   }
 });
 
-test("混合选帧：均匀补齐 + 封顶", () => {
+test("自动选帧：均匀补齐", () => {
   const plan = selectKeyframeTimestamps(SUBTITLE_SEGS, 120, 5, SCENE_PEAKS);
-  assert.equal(plan.length, 5, "capped at maxFrames");
   assert.ok(plan.some((p) => p.reason.includes("even")), "backfill present");
+});
+
+test("自动选帧：不做关键词猜测（语义判断交给主 Agent）", () => {
+  const plan = selectKeyframeTimestamps(
+    [{ start: 0, end: 5, text: "如图所示的界面展示对比数据，看这里，就是它" }],
+    60, 3, [],
+  );
+  assert.ok(!plan.some((p) => p.reason.includes("subtitle")), "no keyword-based picks");
+  assert.ok(plan.every((p) => p.reason === "even interval"), "only even backfill without scene signal");
 });
 
 test("无字幕：场景峰优先 + 均匀补齐", () => {
@@ -201,52 +204,6 @@ test("resolveVisionBaseUrl：provider 默认地址与显式地址", () => {
   assert.equal(resolveVisionBaseUrl("llama-cpp", ""), "http://localhost:8080/v1", "llama-cpp default");
   assert.equal(resolveVisionBaseUrl("openai-compatible", ""), "", "cloud needs explicit url");
   assert.equal(resolveVisionBaseUrl("ollama", "http://10.0.0.5:9999/v1/"), "http://10.0.0.5:9999/v1", "explicit url kept, trailing slash trimmed");
-});
-
-test("detectGapCandidates：指代悬空无落点 → 提权命中", () => {
-  const g = detectGapCandidates([{ start: 0, end: 4, text: "你看这个效果，是不是比刚才好多了" }]);
-  const hit = g.find((c) => c.reason.includes("指代悬空"));
-  assert.ok(hit, "gap hit exists");
-  assert.ok(hit.weight >= 3, "true dangling -> weight boosted: " + hit.weight);
-});
-
-test("detectGapCandidates：指代有落点 → 降权", () => {
-  const g = detectGapCandidates([{ start: 0, end: 4, text: "你看这个红色按钮，点它就能导出" }]);
-  const hit = g.find((c) => c.reason.includes("指代悬空"));
-  assert.ok(hit, "gap hit exists");
-  assert.ok(hit.weight <= 1, "anchored pronoun -> weight downgraded: " + hit.weight);
-});
-
-test("detectGapCandidates：无声演示空隙中点", () => {
-  const g = detectGapCandidates([
-    { start: 0, end: 5, text: "下面看操作" },
-    { start: 20, end: 25, text: "操作完成" },
-  ]);
-  const hit = g.find((c) => c.reason.includes("silent demo"));
-  assert.ok(hit, "silent gap candidate");
-  assert.equal(hit.time, 12.5, "midpoint of silent gap");
-});
-
-test("selectKeyframeTimestamps：gap 候选优先于普通关键词", () => {
-  const plan = selectKeyframeTimestamps([
-    { start: 0, end: 4, text: "这个效果真的很明显" },
-    { start: 2, end: 6, text: "如图所示的界面" },
-  ], 60, 2, []);
-  assert.ok(plan[0].reason.includes("gap"), "gap candidate wins: " + plan[0].reason);
-});
-
-test("selectKeyframeTimestamps：弱关键词仅补位（强信号优先）", () => {
-  const plan = selectKeyframeTimestamps([
-    { start: 0, end: 4, text: "现在开始" },
-    { start: 6, end: 10, text: "如图看一下" },
-  ], 60, 1, []);
-  assert.equal(plan.length, 1);
-  assert.ok(plan[0].reason.includes("如图"), "strong keyword wins the only slot: " + plan[0].reason);
-});
-
-test("selectKeyframeTimestamps：英文关键词词边界（seek 不误命中 see）", () => {
-  const plan = selectKeyframeTimestamps([{ start: 0, end: 5, text: "deep seek honeys 开发者预览版" }], 60, 2, []);
-  assert.ok(!plan.some((p) => p.reason.includes("[see]")), "no false 'see' hit inside 'seek'");
 });
 
 test("capTranscriptSmart：长文稿保骨架（前部完整 + 时间索引）", () => {
