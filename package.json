@@ -1,6 +1,6 @@
 {
   "name": "dsh-bilibili",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "DeepSeek Harness tool plugin: analyze Bilibili videos — transcript first, subtitle-driven keyframes, model summaries",
   "type": "module",
   "main": "lib/index.js",

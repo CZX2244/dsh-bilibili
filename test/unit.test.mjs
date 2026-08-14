@@ -244,6 +244,11 @@ test("selectKeyframeTimestamps：弱关键词仅补位（强信号优先）", ()
   assert.ok(plan[0].reason.includes("如图"), "strong keyword wins the only slot: " + plan[0].reason);
 });
 
+test("selectKeyframeTimestamps：英文关键词词边界（seek 不误命中 see）", () => {
+  const plan = selectKeyframeTimestamps([{ start: 0, end: 5, text: "deep seek honeys 开发者预览版" }], 60, 2, []);
+  assert.ok(!plan.some((p) => p.reason.includes("[see]")), "no false 'see' hit inside 'seek'");
+});
+
 test("capTranscriptSmart：长文稿保骨架（前部完整 + 时间索引）", () => {
   const segs = [];
   let text = "";
