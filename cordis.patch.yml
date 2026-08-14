@@ -49,6 +49,18 @@
         sherpaTokens: ''
         # sherpa CPU 线程数（0 = 自动）
         sherpaThreads: 0
+        # 帧图视觉描述引擎：none(默认,关闭) | ollama(本地) | openai-compatible(云端)；开启后每帧自动附画面文字描述
+        visionProvider: 'none'
+        # 视觉服务地址：留空且 ollama = http://localhost:11434/v1；云端填厂商 OpenAI 兼容地址
+        visionBaseUrl: ''
+        # 视觉模型三档：low(qwen3-vl:2b) / medium(qwen3-vl:8b,默认) / high(qwen3-vl:32b)；或显式模型名（如 minicpm-v、gpt-4o-mini）
+        visionModel: 'medium'
+        # 云端视觉服务的 API Key（本地 Ollama 留空）
+        visionApiKey: ''
+        # 识图提示词（留空 = 内置默认）
+        visionPrompt: ''
+        # 最多描述几张帧（1-20，默认 4，控延迟）
+        visionMaxFrames: 4
         # 帧图片输出目录（留空 = 系统临时目录下 dsh-bilibili/<bvid>）
         framesDir: ''
         # 输出模板文件路径（留空 = 内置 templates/summary.md；可指向自己的模板）

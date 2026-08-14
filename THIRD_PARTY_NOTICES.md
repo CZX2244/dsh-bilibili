@@ -17,6 +17,7 @@ dsh-bilibili 本体以 [MIT](LICENSE) 许可发布。本插件**不打包、不�
 | FFmpeg | 视频解码、关键帧抓取、音频转码 | LGPL-2.1-or-later（部分构建含 GPL 组件，详见 [FFmpeg 官方说明](https://ffmpeg.org/legal.html)） |
 | whisper.cpp | 本地 ASR 引擎（`whisper-local`） | [MIT](https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE) |
 | sherpa-onnx | 本地 ASR 引擎（`sherpa-onnx`，SenseVoice/Paraformer） | [Apache-2.0](https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE) |
+| Ollama | 本地视觉服务（帧图视觉描述，`visionProvider: ollama`） | [MIT](https://github.com/ollama/ollama/blob/main/LICENSE) |
 
 ## 本地 ASR 模型（用户自行下载，插件不分发）
 
@@ -24,8 +25,10 @@ dsh-bilibili 本体以 [MIT](LICENSE) 许可发布。本插件**不打包、不�
 | --- | --- | --- |
 | Whisper GGML 模型（`ggml-*.bin`） | OpenAI whisper.cpp 模型发布 | MIT |
 | SenseVoice / Paraformer | 阿里达摩院 FunASR（ModelScope / sherpa-onnx 发布） | Apache-2.0 |
+| Qwen3-VL 系列 / MiniCPM-V | 阿里通义 / 面壁智能（经 Ollama 或云端接口调用） | Apache-2.0 |
 
 ## 网络服务（非开源组件）
 
 - **Bilibili Web API**（api.bilibili.com、comment.bilibili.com 等）：元数据、字幕、评论、弹幕、音视频流。
 - **Bilibili 必剪（Bcut）ASR**：无字幕轨时的默认转写服务（B 站播放器「实时 AI 字幕」同款能力）。属 Bilibili 平台能力、匿名接口，存在限流与接口变更风险；返回文稿可能含识别错误。
+- **OpenAI 兼容视觉接口**（可选，`visionProvider: openai-compatible`）：如 OpenAI、智谱、硅基流动等第三方视觉服务，由用户自行配置地址与密钥。

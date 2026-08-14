@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT } from "../lib/extractor.js";
 import { formatExtraction } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
@@ -161,5 +161,36 @@ test("parseSherpaText：带时间戳行（--> / - / 方括号）", () => {
 test("parseSherpaText：无时间戳回退为单段", () => {
   assert.deepEqual(parseSherpaText("你好 世界"), [{ start: 0, end: 0, text: "你好 世界" }]);
   assert.deepEqual(parseSherpaText(""), []);
+});
+
+test("resolveVisionModel：低中高三档映射与显式名透传", () => {
+  assert.equal(resolveVisionModel("low"), "qwen3-vl:2b");
+  assert.equal(resolveVisionModel("medium"), "qwen3-vl:8b");
+  assert.equal(resolveVisionModel("high"), "qwen3-vl:32b");
+  assert.equal(resolveVisionModel("minicpm-v"), "minicpm-v", "explicit name kept");
+  assert.equal(resolveVisionModel("gpt-4o-mini"), "gpt-4o-mini", "cloud id kept");
+  assert.equal(resolveVisionModel(""), undefined, "empty -> undefined");
+});
+
+test("buildVisionRequest：base64 data URL + model/prompt + apiKey header", () => {
+  const bytes = Buffer.from("fakejpeg");
+  const req = buildVisionRequest(bytes, { model: "medium", prompt: "", apiKey: "" });
+  assert.equal(req.body.model, "qwen3-vl:8b", "tier resolved");
+  assert.ok(req.body.messages[0].content[1].image_url.url.startsWith("data:image/jpeg;base64,"), "data url");
+  assert.equal(req.body.messages[0].content[1].image_url.url, "data:image/jpeg;base64," + bytes.toString("base64"), "base64 correct");
+  assert.equal(req.body.messages[0].content[0].text, DEFAULT_VISION_PROMPT, "default prompt used");
+  assert.equal(req.headers.Authorization, undefined, "no key -> no auth header");
+
+  const withKey = buildVisionRequest(bytes, { model: "gpt-4o-mini", prompt: "看图", apiKey: "sk-test" });
+  assert.equal(withKey.body.model, "gpt-4o-mini", "explicit model kept");
+  assert.equal(withKey.body.messages[0].content[0].text, "看图", "custom prompt used");
+  assert.equal(withKey.headers.Authorization, "Bearer sk-test", "auth header present");
+});
+
+test("parseChatCompletion：OpenAI 格式解析与容错", () => {
+  assert.equal(parseChatCompletion({ choices: [{ message: { content: " 画面描述 " } }] }), "画面描述");
+  assert.equal(parseChatCompletion({ choices: [] }), "", "no choices -> empty");
+  assert.equal(parseChatCompletion({}), "", "empty json -> empty");
+  assert.equal(parseChatCompletion(null), "", "null -> empty");
 });
 

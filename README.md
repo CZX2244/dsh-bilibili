@@ -11,6 +11,7 @@ DeepSeek Harness 工具插件：给 Agent 添加 `bilibili_extract` 工具。发
 ## ✨ 特性
 
 - **文字信息全量提取**：元数据、完整字幕文稿（带时间戳）、热门评论（含楼中楼）、弹幕（高频 + 时间线样本）；**无字幕轨的视频默认用必剪 ASR 转写**（B站播放器「实时AI字幕」同款能力，匿名可用，24h 缓存），也可切换到本地引擎——**sherpa-onnx（中文推荐，SenseVoice）** 或 **whisper.cpp**（通用），离线可用、适配不同配置；单个信息源失败不影响整体（各自降级为空并带 note）；
+- **可选帧图视觉描述**：无视觉能力的主模型也能「看到」画面——帧图可交给本地 Ollama（三档 Qwen3-VL：2B/8B/32B）或任意 OpenAI 兼容视觉接口转成文字描述，报告按需引用配图；
 - **混合信号自动选帧**：画面场景切换检测（主信号）+ 字幕视觉暗示词（加权）+ 均匀间隔兜底，5 秒去重；
 - **两段式工作流**：模型先读文稿（秒级、零下载），再带 `timestamps` 定向抓帧——每帧自动配附近字幕，视频 24h 缓存复用，多轮迭代不重复下载；
 - **输出模板可替换**：内置简洁总结模板（省时 + 可转发），`summaryTemplate` 配置可指向任意自定义模板文件；
@@ -96,6 +97,12 @@ dsh plugin --profile web add ./dsh-bilibili
         whisperModelDir: ''          # 模型目录，留空 = <whisperBin 同目录>/models
         whisperLanguage: 'zh'        # 转写语言
         whisperThreads: 0            # whisper CPU 线程数（0=自动）
+        visionProvider: 'none'        # 帧图视觉描述：none(默认) | ollama | openai-compatible
+        visionBaseUrl: ''             # 视觉服务地址，留空且 ollama = http://localhost:11434/v1
+        visionModel: 'medium'         # 三档：low(2B) / medium(8B) / high(32B)，或显式模型名
+        visionApiKey: ''              # 云端视觉 API Key（本地留空）
+        visionPrompt: ''              # 识图提示词（留空 = 内置默认）
+        visionMaxFrames: 4            # 最多描述几张帧（控延迟）
         framesDir: ''                # 帧图输出目录，留空 = 系统临时目录/dsh-bilibili/<bvid>
         summaryTemplate: ''          # 输出模板路径，留空 = 内置 templates/summary.md
         timeoutMs: 300000            # 工具整体超时（毫秒）
@@ -134,6 +141,24 @@ B 站以中文内容为主，SenseVoice 的中文识别率明显高于 Whisper�
 3. 配置里设 `asrProvider: 'whisper-local'` 并填 `whisperBin` / `whisperModel`。
 
 > 提示：`asrProvider: 'auto'` 会按「必剪 → sherpa-onnx → whisper-local」依次降级；中文内容建议至少 `medium`（whisper）或直接选 SenseVoice（sherpa）。sherpa-onnx 的 CLI 参数随版本略有差异，如遇报错请以你所用版本的 `--help` 为准调整。
+
+### 🔍 帧图视觉描述（可选）
+
+DeepSeek 主模型没有视觉能力时，可开启本功能：抓帧后把每帧交给**视觉模型**转成文字描述（随帧返回 `description` 字段），主模型据此判断报告里**哪些画面值得引用**——仅当内容需要视觉确认（图表/界面/演示细节）时才配图，纯口播画面不配图。默认关闭；视觉服务失败不影响主流程（帧路径照常返回）。
+
+**本地（推荐）**：安装 [Ollama](https://ollama.com) 后拉取模型即可，无 key、离线、不花钱：
+
+| 档位 | visionModel | Ollama 模型 | 内存需求（约） | 适用 |
+|------|-------------|-------------|---------------|------|
+| 低 | `low` | `qwen3-vl:2b` | ~2 GB | 低配电脑 |
+| 中 | `medium`（默认） | `qwen3-vl:8b` | ~6-8 GB | 主流电脑（推荐） |
+| 高 | `high` | `qwen3-vl:32b` | ~20 GB / 建议 GPU | 高配，质量最佳 |
+
+中档备选 `minicpm-v`（MiniCPM-V 2.6，8B，中文 OCR 强）。`visionModel` 也接受显式模型名（Ollama tag 或云端模型 id）。
+
+**云端**：任何 OpenAI 兼容接口，例如 `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel`（如 gpt-4o-mini / glm-4v-flash）+ `visionApiKey`。
+
+> 提示：本地 CPU 描述数张帧需要几十秒到几分钟（GPU 更快）；`visionMaxFrames` 控制描述帧数上限。识图提示词可用 `visionPrompt` 自定义（留空用内置默认）。
 
 ---
 
