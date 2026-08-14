@@ -8,7 +8,7 @@ DeepSeek Harness 工具插件：给 Agent 添加 `bilibili_extract` 工具。发
 
 ## ✨ 特性
 
-- **文字信息全量提取**：元数据、完整字幕文稿（带时间戳）、热门评论（含楼中楼）、弹幕（高频 + 时间线样本）；**无字幕轨的视频自动用必剪 ASR 转写**（B站播放器「实时AI字幕」同款能力，匿名可用，24h 缓存）；单个信息源失败不影响整体（各自降级为空并带 note）；
+- **文字信息全量提取**：元数据、完整字幕文稿（带时间戳）、热门评论（含楼中楼）、弹幕（高频 + 时间线样本）；**无字幕轨的视频默认用必剪 ASR 转写**（B站播放器「实时AI字幕」同款能力，匿名可用，24h 缓存），也可切换到本地引擎——**sherpa-onnx（中文推荐，SenseVoice）** 或 **whisper.cpp**（通用），离线可用、适配不同配置；单个信息源失败不影响整体（各自降级为空并带 note）；
 - **混合信号自动选帧**：画面场景切换检测（主信号）+ 字幕视觉暗示词（加权）+ 均匀间隔兜底，5 秒去重；
 - **两段式工作流**：模型先读文稿（秒级、零下载），再带 `timestamps` 定向抓帧——每帧自动配附近字幕，视频 24h 缓存复用，多轮迭代不重复下载；
 - **输出模板可替换**：内置简洁总结模板（省时 + 可转发），`summaryTemplate` 配置可指向任意自定义模板文件；
@@ -83,11 +83,55 @@ dsh plugin --profile web add ./dsh-bilibili
         quality: 32                  # 16=360p 32=480p 64=720p 80=1080p
         detectScenes: true           # 场景切换检测（>20 分钟视频自动跳过）
         sceneThreshold: 0.4          # 场景切换阈值 0-1，越大越严格
-        asrFallback: true            # 无字幕轨时自动 ASR 转写（必剪接口，匿名可用）
-        framesDir: ''                 # 帧图输出目录，留空 = 系统临时目录/dsh-bilibili/<bvid>
-        summaryTemplate: ''           # 输出模板路径，留空 = 内置 templates/summary.md
+        asrProvider: 'bcut'          # ASR 引擎：bcut(必剪,默认) | sherpa-onnx(中文推荐) | whisper-local | auto | none
+        sherpaBin: ''                # sherpa-onnx-offline 可执行文件路径
+        sherpaModel: ''              # sherpa 模型 onnx 路径（SenseVoice/Paraformer）
+        sherpaModelType: 'sense-voice'  # sense-voice | paraformer | zipformer2-ctc
+        sherpaTokens: ''             # sherpa tokens.txt 路径
+        sherpaThreads: 0             # sherpa CPU 线程数（0=自动）
+        whisperBin: 'whisper-cli'    # whisper.cpp 可执行文件（PATH 或绝对路径）
+        whisperModel: 'medium'       # 模型三档：small(低) / medium(中) / large-v3(高)，或 ggml-*.bin 路径
+        whisperModelDir: ''          # 模型目录，留空 = <whisperBin 同目录>/models
+        whisperLanguage: 'zh'        # 转写语言
+        whisperThreads: 0            # whisper CPU 线程数（0=自动）
+        framesDir: ''                # 帧图输出目录，留空 = 系统临时目录/dsh-bilibili/<bvid>
+        summaryTemplate: ''          # 输出模板路径，留空 = 内置 templates/summary.md
         timeoutMs: 300000            # 工具整体超时（毫秒）
 ```
+
+### 本地 ASR 转写（可选，中文推荐 sherpa-onnx）
+
+无字幕视频默认走必剪（零配置、匿名、国内直连）。想离线、或必剪不可用时，可切换到本地引擎。**插件不打包模型，只提供接口，模型与二进制需自行下载**（本地离线推理的物理前提，但不涉及任何 API key / 额度 / 付费）。
+
+#### 推荐：sherpa-onnx（中文，SenseVoice）
+
+B 站以中文内容为主，SenseVoice 的中文识别率明显高于 Whisper，且速度更快、模型更小；模型官方托管在 ModelScope（国内直连、下载快）。
+
+| 档位 | 推荐模型 | 体积（约） | 适用 |
+|------|----------|-----------|------|
+| 低 | SenseVoiceSmall（int8） | ~230 MB | 低配电脑 |
+| 中 | SenseVoiceSmall（fp32） | ~900 MB | 主流电脑（推荐） |
+| 高 | Paraformer-large | ~2.5 GB | 高配电脑 / 极致精度 |
+
+步骤：
+
+1. 从 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 下载对应系统的 `sherpa-onnx-offline` 可执行文件；
+2. 下载模型（`model.onnx` + `tokens.txt`），SenseVoice 模型可在 [ModelScope](https://modelscope.cn) 或 sherpa-onnx 的模型列表获取；
+3. 配置里设 `asrProvider: 'sherpa-onnx'`，并填 `sherpaBin` / `sherpaModel` / `sherpaTokens`（`sherpaModelType` 默认 `sense-voice`）。
+
+#### 备选：whisper.cpp（通用 / 英文）
+
+| 档位 | whisperModel | 模型文件 | 体积 | 适用 |
+|------|--------------|----------|------|------|
+| 低 | `small` | `ggml-small.bin` | ~466 MB | 低配电脑 / 快速出稿 |
+| 中 | `medium` | `ggml-medium.bin` | ~1.5 GB | 主流电脑 |
+| 高 | `large-v3` | `ggml-large-v3.bin` | ~3 GB | 高配电脑 |
+
+1. 从 [whisper.cpp](https://github.com/ggml-org/whisper.cpp) 下载 `whisper-cli` 可执行文件；
+2. 下载对应档位的 `ggml-*.bin` 模型，放到 `models/` 目录；
+3. 配置里设 `asrProvider: 'whisper-local'` 并填 `whisperBin` / `whisperModel`。
+
+> 提示：`asrProvider: 'auto'` 会按「必剪 → sherpa-onnx → whisper-local」依次降级；中文内容建议至少 `medium`（whisper）或直接选 SenseVoice（sherpa）。sherpa-onnx 的 CLI 参数随版本略有差异，如遇报错请以你所用版本的 `--help` 为准调整。
 
 ---
 
@@ -130,7 +174,8 @@ New-Item -ItemType Junction -Path ".\node_modules\@deepseek-ai" `
 ## ⚠️ 限制
 
 - 多分 P 视频当前只取第一 P；
-- 无字幕轨的视频自动用必剪 ASR 转写文稿；转写结果可能有识别错误，返回中会如实标注；
+- 无字幕轨的视频默认用必剪 ASR 转写文稿，可切本地 sherpa-onnx / whisper.cpp；转写结果可能有识别错误，返回中会如实标注；
+- 必剪 ASR 是匿名接口，高频连续调用可能被限流（返回错误）；需要高频/稳定转写时建议 `asrProvider: 'auto'`（自动降级）或直接切本地 sherpa-onnx；
 - 帧图落盘不自动清理（便于模型随时 read_image），代价是磁盘占用；
 - Node fetch 不读系统代理环境变量，需要代理的网络环境待适配；
 - 场景检测对 >20 分钟视频自动跳过（全片解码耗时）。

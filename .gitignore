@@ -12,3 +12,12 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# 本地 ASR 模型与二进制（用户自行下载，不入库）
+ggml-*.bin
+*.onnx
+*.gguf
+*.ggml
+models/
+whisper-cli*
+sherpa-onnx-offline*
+

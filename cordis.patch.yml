@@ -27,8 +27,28 @@
         detectScenes: true
         # 场景切换检测阈值（0-1，越大越严格）
         sceneThreshold: 0.4
-        # 无字幕轨时用必剪 ASR 自动转写（B站播放器「实时AI字幕」同款能力，匿名可用）
-        asrFallback: true
+        # 无字幕轨时的 ASR 转写引擎：bcut(必剪,默认) | sherpa-onnx(中文推荐) | whisper-local | auto(必剪→sherpa→whisper) | none
+        asrProvider: 'bcut'
+        # whisper.cpp 可执行文件（在 PATH 里或填绝对路径）；仅 asrProvider=whisper-local/auto 时用到
+        whisperBin: 'whisper-cli'
+        # whisper 模型三档：small(低配) / medium(中配) / large-v3(高配)；也可填 ggml-*.bin 完整路径（模型需自行下载）
+        whisperModel: 'medium'
+        # whisper 模型目录（whisperModel 为档位名时生效）；留空 = <whisperBin 同目录>/models
+        whisperModelDir: ''
+        # 转写语言
+        whisperLanguage: 'zh'
+        # CPU 线程数（0 = 自动）
+        whisperThreads: 0
+        # sherpa-onnx-offline 可执行文件路径（中文推荐）；留空表示未安装
+        sherpaBin: ''
+        # sherpa 模型 onnx 文件路径（SenseVoice/Paraformer，需自行下载）
+        sherpaModel: ''
+        # sherpa 模型类型：sense-voice | paraformer | zipformer2-ctc（决定命令行 flag）
+        sherpaModelType: 'sense-voice'
+        # sherpa tokens.txt 路径
+        sherpaTokens: ''
+        # sherpa CPU 线程数（0 = 自动）
+        sherpaThreads: 0
         # 帧图片输出目录（留空 = 系统临时目录下 dsh-bilibili/<bvid>）
         framesDir: ''
         # 输出模板文件路径（留空 = 内置 templates/summary.md；可指向自己的模板）

@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText } from "../lib/extractor.js";
 import { formatExtraction } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
@@ -103,5 +103,63 @@ test("formatExtraction：成功摘要关键元素", () => {
   assert.ok(text.includes("read_image"), "read_image hint");
   assert.ok(text.includes("capture mode: local"), "mode line");
   assert.ok(text.includes("C:/t.jpg"), "frame path");
+});
+
+test("parseWhisperTime：MM:SS,mmm 与 HH:MM:SS,mmm", () => {
+  assert.equal(parseWhisperTime("00:01:15,500"), 75.5);
+  assert.equal(parseWhisperTime("01:15,500"), 75.5);
+  assert.equal(parseWhisperTime("00:00:00,000"), 0);
+  assert.equal(parseWhisperTime("bad"), undefined);
+});
+
+test("parseWhisperJson：offsets(毫秒) → 秒 + 跳空段", () => {
+  const segs = parseWhisperJson({
+    transcription: [
+      { text: " 第一句 ", offsets: { from: 0, to: 520 } },
+      { text: "第二句", offsets: { from: 1000, to: 2500 } },
+      { text: "   ", offsets: { from: 2500, to: 2600 } },
+    ],
+  });
+  assert.equal(segs.length, 2, "blank skipped");
+  assert.deepEqual(segs[0], { start: 0, end: 0.52, text: "第一句" });
+  assert.deepEqual(segs[1], { start: 1, end: 2.5, text: "第二句" });
+});
+
+test("parseWhisperJson：无 offsets 时回退解析 timestamps", () => {
+  const segs = parseWhisperJson({
+    transcription: [{ text: "你好", timestamps: { from: "00:00:03,000", to: "00:00:05,000" } }],
+  });
+  assert.deepEqual(segs, [{ start: 3, end: 5, text: "你好" }]);
+});
+
+test("resolveWhisperModel：低中高三档映射", () => {
+  assert.ok(resolveWhisperModel("low", "", "").endsWith("ggml-small.bin"), "low → small");
+  assert.ok(resolveWhisperModel("medium", "", "").endsWith("ggml-medium.bin"), "medium → medium");
+  assert.ok(resolveWhisperModel("high", "", "").endsWith("ggml-large-v3.bin"), "high → large-v3");
+  assert.ok(resolveWhisperModel("large-v3", "", "").endsWith("ggml-large-v3.bin"), "large-v3 literal");
+});
+
+test("resolveWhisperModel：目录拼接与字面路径", () => {
+  assert.equal(resolveWhisperModel("medium", "D:/models", "").replace(/\\/g, "/"), "D:/models/ggml-medium.bin");
+  assert.equal(resolveWhisperModel("C:/x/my.bin", "", ""), "C:/x/my.bin", "literal path kept");
+  assert.equal(resolveWhisperModel("small", "", "D:/whisper/whisper-cli.exe").replace(/\\/g, "/"), "D:/whisper/models/ggml-small.bin");
+  assert.equal(resolveWhisperModel("", "", ""), undefined, "empty → undefined");
+});
+
+test("parseSherpaText：带时间戳行（--> / - / 方括号）", () => {
+  const segs = parseSherpaText([
+    "00:00:00.000 --> 00:00:02.400: 第一句",
+    "00:00:02.400 - 00:00:05.000  第二句",
+    "[00:00:05.000 --> 00:00:07.000] 第三句",
+  ].join("\n"));
+  assert.equal(segs.length, 3);
+  assert.deepEqual(segs[0], { start: 0, end: 2.4, text: "第一句" });
+  assert.deepEqual(segs[1], { start: 2.4, end: 5, text: "第二句" });
+  assert.deepEqual(segs[2], { start: 5, end: 7, text: "第三句" });
+});
+
+test("parseSherpaText：无时间戳回退为单段", () => {
+  assert.deepEqual(parseSherpaText("你好 世界"), [{ start: 0, end: 0, text: "你好 世界" }]);
+  assert.deepEqual(parseSherpaText(""), []);
 });
 
