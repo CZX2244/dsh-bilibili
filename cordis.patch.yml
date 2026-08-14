@@ -27,6 +27,8 @@
         detectScenes: true
         # 场景切换检测阈值（0-1，越大越严格）
         sceneThreshold: 0.4
+        # 清晰帧优选：目标时间点 ±1.5s 内用 blurdetect 选最清晰的帧（避开动画入场/运动模糊）
+        sharpFrames: true
         # 无字幕轨时的 ASR 转写引擎：bcut(必剪,默认) | sherpa-onnx(中文推荐) | whisper-local | auto(必剪→sherpa→whisper) | none
         asrProvider: 'bcut'
         # whisper.cpp 可执行文件（在 PATH 里或填绝对路径）；仅 asrProvider=whisper-local/auto 时用到

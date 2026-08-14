@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak, parseBlurMetadata } from "../lib/extractor.js";
 import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
@@ -211,6 +211,23 @@ test("pickNearestPeak：取距离中心最近的场景峰", () => {
   assert.equal(pickNearestPeak(peaks, 14).time, 13.2, "nearest peak picked");
   assert.equal(pickNearestPeak([], 14), null, "empty -> null");
   assert.equal(pickNearestPeak(peaks, NaN), null, "bad center -> null");
+});
+
+test("parseBlurMetadata：解析模糊分并选出最清晰帧", () => {
+  const text = [
+    "frame:0 pts:0 pts_time:0",
+    "lavfi.blur=40.5",
+    "frame:1 pts:33 pts_time:0.0333125",
+    "lavfi.blur=8.2",
+    "frame:2 pts:66 pts_time:0.0666875",
+    "lavfi.blur=12.1",
+  ].join("\n");
+  const entries = parseBlurMetadata(text, 100);
+  assert.equal(entries.length, 3, "3 frames parsed");
+  assert.deepEqual(entries[0], { time: 100, blur: 40.5 }, "time offset applied");
+  const sharpest = [...entries].sort((a, b) => a.blur - b.blur)[0];
+  assert.equal(sharpest.blur, 8.2, "min blur = sharpest");
+  assert.equal(parseBlurMetadata("", 0).length, 0, "empty input");
 });
 
 test("capTranscriptSmart：长文稿保骨架（前部完整 + 时间索引）", () => {
