@@ -4,9 +4,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
+import { selectKeyframeTimestamps, formatTime, detectGapCandidates } from "../lib/keyframes.js";
 import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT } from "../lib/extractor.js";
-import { formatExtraction } from "../lib/format.js";
+import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
   { start: 0, end: 5, text: "大家好今天聊聊" },
@@ -201,6 +201,70 @@ test("resolveVisionBaseUrl：provider 默认地址与显式地址", () => {
   assert.equal(resolveVisionBaseUrl("llama-cpp", ""), "http://localhost:8080/v1", "llama-cpp default");
   assert.equal(resolveVisionBaseUrl("openai-compatible", ""), "", "cloud needs explicit url");
   assert.equal(resolveVisionBaseUrl("ollama", "http://10.0.0.5:9999/v1/"), "http://10.0.0.5:9999/v1", "explicit url kept, trailing slash trimmed");
+});
+
+test("detectGapCandidates：指代悬空无落点 → 提权命中", () => {
+  const g = detectGapCandidates([{ start: 0, end: 4, text: "你看这个效果，是不是比刚才好多了" }]);
+  const hit = g.find((c) => c.reason.includes("指代悬空"));
+  assert.ok(hit, "gap hit exists");
+  assert.ok(hit.weight >= 3, "true dangling -> weight boosted: " + hit.weight);
+});
+
+test("detectGapCandidates：指代有落点 → 降权", () => {
+  const g = detectGapCandidates([{ start: 0, end: 4, text: "你看这个红色按钮，点它就能导出" }]);
+  const hit = g.find((c) => c.reason.includes("指代悬空"));
+  assert.ok(hit, "gap hit exists");
+  assert.ok(hit.weight <= 1, "anchored pronoun -> weight downgraded: " + hit.weight);
+});
+
+test("detectGapCandidates：无声演示空隙中点", () => {
+  const g = detectGapCandidates([
+    { start: 0, end: 5, text: "下面看操作" },
+    { start: 20, end: 25, text: "操作完成" },
+  ]);
+  const hit = g.find((c) => c.reason.includes("silent demo"));
+  assert.ok(hit, "silent gap candidate");
+  assert.equal(hit.time, 12.5, "midpoint of silent gap");
+});
+
+test("selectKeyframeTimestamps：gap 候选优先于普通关键词", () => {
+  const plan = selectKeyframeTimestamps([
+    { start: 0, end: 4, text: "这个效果真的很明显" },
+    { start: 2, end: 6, text: "如图所示的界面" },
+  ], 60, 2, []);
+  assert.ok(plan[0].reason.includes("gap"), "gap candidate wins: " + plan[0].reason);
+});
+
+test("selectKeyframeTimestamps：弱关键词仅补位（强信号优先）", () => {
+  const plan = selectKeyframeTimestamps([
+    { start: 0, end: 4, text: "现在开始" },
+    { start: 6, end: 10, text: "如图看一下" },
+  ], 60, 1, []);
+  assert.equal(plan.length, 1);
+  assert.ok(plan[0].reason.includes("如图"), "strong keyword wins the only slot: " + plan[0].reason);
+});
+
+test("capTranscriptSmart：长文稿保骨架（前部完整 + 时间索引）", () => {
+  const segs = [];
+  let text = "";
+  for (let i = 0; i < 100; i++) {
+    segs.push({ start: i * 60, end: i * 60 + 10, text: "第" + i + "段内容" });
+    text += ("第" + i + "段内容").repeat(20);
+  }
+  const out = capTranscriptSmart(segs, text, 8000);
+  assert.ok(out.length < text.length, "compressed");
+  assert.ok(out.includes("全文时间索引"), "has time index");
+  assert.ok(/\[0:00\]/.test(out), "index entries with timestamps");
+  assert.ok(out.includes("[95:00]"), "late-section bucket head discoverable in index");
+});
+
+test("pickDanmakuPeaks：密度峰采样（片头弹幕不霸榜）", () => {
+  const samples = [];
+  for (let i = 0; i < 40; i++) samples.push({ time: i, text: "来了" + i });
+  for (let i = 0; i < 10; i++) samples.push({ time: 300 + i, text: "高能" + i });
+  const picked = pickDanmakuPeaks(samples, 60, 4, 30);
+  assert.ok(picked.length <= 30, "capped");
+  assert.ok(picked.some((s) => s.text.startsWith("高能")), "peak window included");
 });
 
 test("resolveVisionPrompt：优先级链与分模型选择", () => {

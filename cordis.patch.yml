@@ -61,8 +61,8 @@
         visionPrompt: ''
         # 分模型提示词覆盖（可选，如 { 'qwen3-vl:2b': '自定义...', 'minicpm-v': '自定义...' }）；按 显式模型名 > 档位名(low/medium) > 全局 visionPrompt 的优先级生效
         visionPromptByModel: {}
-        # 最多描述几张帧（1-20，默认 4，控延迟）
-        visionMaxFrames: 4
+        # 最多描述几张帧（1-20，默认 6，与 maxFrames 对齐；CPU 上注意延迟）
+        visionMaxFrames: 6
         # 帧图片输出目录（留空 = 系统临时目录下 dsh-bilibili/<bvid>）
         framesDir: ''
         # 输出模板文件路径（留空 = 内置 templates/summary.md；可指向自己的模板）
