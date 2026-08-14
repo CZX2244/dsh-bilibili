@@ -52,18 +52,18 @@ dsh plugin --profile web add ./dsh-bilibili
 
 ---
 
-## 🧠 推荐工作流（两段式）
+## 🧠 推荐工作流（两段式，主路径：提示词驱动）
 
-工具描述与系统提示中已写入指引，模型会自然采用：
+**抓帧不是靠关键词自动猜，而是由主 Agent 用系统提示里的一套分析提示词，读完文稿后自己判断**哪些位置「离开画面就不完整」、必须看画面。系统提示内置的「内容完整性检查」教模型找五类信息缺失——**指代悬空 / 结论先行 / 操作无口述 / 无声演示 / 视觉对比**，并显式回报：
 
 ```
-① bilibili_extract(url, extract_frames: false)   # 只拿文字，秒回、零下载
-② agent 读文稿，自己判断哪些时刻需要画面辅助
-③ bilibili_extract(url, timestamps: [32, 180])   # 定向抓帧，每帧附附近字幕
-④ agent 用 read_image 看帧 → 总结
+① bilibili_extract(url, extract_frames: false)      # 只拿文字，秒级、零下载
+② agent 逐段检查文稿的「信息缺失」位置，确定必须看画面的时间点
+③ agent 在回复末尾以 [建议抓帧] mm:ss 理由 列出清单，再带 timestamps 定向抓帧
+④ 依据帧的 description/citation_hint（或 read_image）判断报告里引用哪些图
 ```
 
-不传 `timestamps` 的单次调用则走混合自动选帧。
+> 兜底：**单次调用**（不传 `timestamps`）时，插件才用自动选帧——内容缺失检测（gap-driven，第一优先）+ 场景切换（>20 分钟抽样式）+ 字幕暗示词强弱分档 + 均匀间隔。这是给「模型没走两段式」时的保险，不是主路径。
 
 ---
 
