@@ -1,0 +1,14 @@
+# 本地开发依赖 junction（指向 profile node_modules）
+node_modules/
+
+# 测试产物
+.bili-test-frames/
+.bili-hybrid-test/
+.bili-twopass/
+*.log
+
+# 环境与编辑器
+.env
+.DS_Store
+Thumbs.db
+

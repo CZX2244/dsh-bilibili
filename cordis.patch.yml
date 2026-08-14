@@ -1,0 +1,37 @@
+# dsh-bilibili bundle patch — one insert row over the profile tree.
+# Defaults live here; override any field in profiles/web/cordis.patch.yml
+# (e.g. sessdata, commentLimit) — later layers win per row.
+- insert:
+    - id: bilibili
+      name: 'dsh-bilibili'
+      config:
+        # B站登录凭证（可选，提升评论/字幕获取成功率），留空则匿名
+        sessdata: ''
+        # 评论抓取数量上限
+        commentLimit: 20
+        # 字幕驱动关键帧最大数量
+        maxFrames: 6
+        # 是否抓取关键帧（关闭后只提取文字信息）
+        extractFrames: true
+        # 抓帧时是否先把视频下载到本地（推荐；失败自动回退远程逐帧）
+        downloadVideo: true
+        # 是否保留下载的视频文件（默认抓完即删）
+        keepVideo: false
+        # 视频时长超过该分钟数时不下载，改为远程逐帧提取
+        maxVideoMinutes: 30
+        # 下载大小上限（MB）
+        maxDownloadMb: 800
+        # 下载清晰度（16=360p, 32=480p, 64=720p, 80=1080p）
+        quality: 32
+        # 是否启用画面场景切换检测（候选时间点的主信号；>20 分钟视频自动跳过）
+        detectScenes: true
+        # 场景切换检测阈值（0-1，越大越严格）
+        sceneThreshold: 0.4
+        # 无字幕轨时用必剪 ASR 自动转写（B站播放器「实时AI字幕」同款能力，匿名可用）
+        asrFallback: true
+        # 帧图片输出目录（留空 = 系统临时目录下 dsh-bilibili/<bvid>）
+        framesDir: ''
+        # 输出模板文件路径（留空 = 内置 templates/summary.md；可指向自己的模板）
+        summaryTemplate: ''
+        # 工具整体超时（毫秒）
+        timeoutMs: 300000
