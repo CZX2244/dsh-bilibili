@@ -155,7 +155,9 @@ DeepSeek 主模型没有视觉能力时，可开启本功能：抓帧后把每�
 | 中 | `medium`（默认） | `qwen3-vl:8b` | ~6-8 GB | 主流电脑（推荐） |
 | 高 | `high` | `qwen3-vl:32b` | ~20 GB / 建议 GPU | 高配，质量最佳 |
 
-中档备选 **MiniCPM-V 4.0**（面壁，2026 年新作，官方称超越 GPT-4.1-mini、手机可跑，中文 OCR 强，官方提供 GGUF/int4）。`visionModel` 也接受显式模型名（Ollama tag 或云端模型 id）。
+中档备选 **MiniCPM-V 4.0**（面壁，2026 年新作，官方称超越 GPT-4.1-mini、手机可跑，官方提供 GGUF/int4；其 Ollama tag 名称请以官方库为准）。`visionModel` 也接受显式模型名（Ollama tag 或云端模型 id）。
+
+> 选型依据：本任务是「**理解画面内容 + 输出配图建议**」而非 OCR 转录，权重放在**中文场景理解与指令遵循**上，因此默认三档用同族 Qwen3-VL（行为一致、提示词可共用）；追求极致端侧省资源可选 MiniCPM-V 4.0。
 
 **llama.cpp（本地备选）**：用 `llama-server` 启动视觉 GGUF（模型 + mmproj），它自带 OpenAI 兼容接口：
 
@@ -165,7 +167,7 @@ llama-server -m qwen2.5-vl-7b-q4_k_m.gguf --mmproj mmproj-qwen2.5-vl-7b-f16.gguf
 
 配置 `visionProvider: 'llama-cpp'`（默认地址 http://localhost:8080/v1）即可。llama.cpp 支持的视觉模型：Qwen2-VL / Qwen2.5-VL / Qwen3-VL（视版本）、MiniCPM-V（含 4.0）、InternVL、GLM-4V、LLaVA、moondream2 等（GGUF 可在 HuggingFace 下载）。中文推荐 Qwen3-VL 系列 GGUF 或 **MiniCPM-V 4.0**（官方 GGUF，端侧优化、中文 OCR 强）。
 
-**云端**：任何 OpenAI 兼容接口，例如 `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel`（如 gpt-4o-mini / glm-4v-flash）+ `visionApiKey`。
+**云端**：任何 OpenAI 兼容接口，例如 `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel` + `visionApiKey`。单帧描述任务不需要旗舰多模态，便宜档即可：GLM-4V-Flash（中文有免费额度）/ GPT-4o-mini / 硅基流动 Qwen-VL 系列。
 
 **分模型提示词**：所有内置提示词的任务都是**理解这一帧的内容**（画面里发生了什么、展示了什么），文字只转述要点、不做逐字转录。插件会按模型自动选提示词：MiniCPM-V 家族有专属提示词、moondream2 用英文提示词、低档小模型用更短的提示词；你也可以用 `visionPrompt`（全局）或 `visionPromptByModel`（按显式模型名或档位 low/medium/high）覆盖。
 
