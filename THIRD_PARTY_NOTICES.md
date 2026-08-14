@@ -18,6 +18,7 @@ dsh-bilibili 本体以 [MIT](LICENSE) 许可发布。本插件**不打包、不�
 | whisper.cpp | 本地 ASR 引擎（`whisper-local`） | [MIT](https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE) |
 | sherpa-onnx | 本地 ASR 引擎（`sherpa-onnx`，SenseVoice/Paraformer） | [Apache-2.0](https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE) |
 | Ollama | 本地视觉服务（帧图视觉描述，`visionProvider: ollama`） | [MIT](https://github.com/ollama/ollama/blob/main/LICENSE) |
+| llama.cpp（llama-server） | 本地视觉服务（帧图视觉描述，`visionProvider: llama-cpp`） | [MIT](https://github.com/ggml-org/llama.cpp/blob/master/LICENSE) |
 
 ## 本地 ASR 模型（用户自行下载，插件不分发）
 

@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl } from "../lib/extractor.js";
 import { formatExtraction } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
@@ -192,5 +192,12 @@ test("parseChatCompletion：OpenAI 格式解析与容错", () => {
   assert.equal(parseChatCompletion({ choices: [] }), "", "no choices -> empty");
   assert.equal(parseChatCompletion({}), "", "empty json -> empty");
   assert.equal(parseChatCompletion(null), "", "null -> empty");
+});
+
+test("resolveVisionBaseUrl：provider 默认地址与显式地址", () => {
+  assert.equal(resolveVisionBaseUrl("ollama", ""), "http://localhost:11434/v1", "ollama default");
+  assert.equal(resolveVisionBaseUrl("llama-cpp", ""), "http://localhost:8080/v1", "llama-cpp default");
+  assert.equal(resolveVisionBaseUrl("openai-compatible", ""), "", "cloud needs explicit url");
+  assert.equal(resolveVisionBaseUrl("ollama", "http://10.0.0.5:9999/v1/"), "http://10.0.0.5:9999/v1", "explicit url kept, trailing slash trimmed");
 });
 

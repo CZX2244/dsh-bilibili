@@ -49,7 +49,7 @@
         sherpaTokens: ''
         # sherpa CPU 线程数（0 = 自动）
         sherpaThreads: 0
-        # 帧图视觉描述引擎：none(默认,关闭) | ollama(本地) | openai-compatible(云端)；开启后每帧自动附画面文字描述
+        # 帧图视觉描述引擎：none(默认,关闭) | ollama(本地) | llama-cpp(本地) | openai-compatible(云端)；开启后每帧自动附画面文字描述
         visionProvider: 'none'
         # 视觉服务地址：留空且 ollama = http://localhost:11434/v1；云端填厂商 OpenAI 兼容地址
         visionBaseUrl: ''
