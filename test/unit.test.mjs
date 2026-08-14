@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT } from "../lib/extractor.js";
 import { formatExtraction } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
@@ -199,5 +199,45 @@ test("resolveVisionBaseUrl：provider 默认地址与显式地址", () => {
   assert.equal(resolveVisionBaseUrl("llama-cpp", ""), "http://localhost:8080/v1", "llama-cpp default");
   assert.equal(resolveVisionBaseUrl("openai-compatible", ""), "", "cloud needs explicit url");
   assert.equal(resolveVisionBaseUrl("ollama", "http://10.0.0.5:9999/v1/"), "http://10.0.0.5:9999/v1", "explicit url kept, trailing slash trimmed");
+});
+
+test("resolveVisionPrompt：优先级链与分模型选择", () => {
+  assert.equal(resolveVisionPrompt("qwen3-vl:8b", "", {}), DEFAULT_VISION_PROMPT, "default family");
+  assert.equal(resolveVisionPrompt("low", "", {}), VISION_PROMPT_SHORT, "low tier -> short");
+  assert.equal(resolveVisionPrompt("qwen3-vl:2b", "", {}), VISION_PROMPT_SHORT, "2b model -> short");
+  const mp = resolveVisionPrompt("minicpm-v:8b-2.6-q6_K", "", {});
+  assert.ok(mp.includes("结论"), "minicpm family prompt used");
+  const en = resolveVisionPrompt("moondream2", "", {});
+  assert.ok(/citation: suitable/i.test(en), "moondream2 gets english prompt");
+  // 用户覆盖优先级：显式模型名 > 档位 > 全局
+  assert.equal(resolveVisionPrompt("qwen3-vl:8b", "全局覆盖", {}), "全局覆盖");
+  assert.equal(resolveVisionPrompt("qwen3-vl:8b", "全局覆盖", { medium: "档位覆盖" }), "档位覆盖");
+  assert.equal(resolveVisionPrompt("qwen3-vl:8b", "全局覆盖", { "qwen3-vl:8b": "精确覆盖" }), "精确覆盖");
+});
+
+test("resolveVisionPrompt：内容理解而非逐字转录（无 OCR 指令）", () => {
+  const p8 = resolveVisionPrompt("qwen3-vl:8b", "", {});
+  assert.ok(p8.includes("不要逐字转录"), "default prompt forbids transcription");
+  const mp = resolveVisionPrompt("minicpm-v:8b-2.6-q6_K", "", {});
+  assert.ok(mp.includes("不要逐字转录"), "minicpm prompt forbids transcription");
+  const sh = resolveVisionPrompt("low", "", {});
+  assert.ok(!/转录|转写/.test(sh), "short prompt has no transcription demand at all");
+  const en = resolveVisionPrompt("moondream2", "", {});
+  assert.ok(/do not transcribe/i.test(en), "english prompt forbids transcription");
+});
+
+test("parseCitationHint：中英标记解析与容错", () => {
+  assert.equal(parseCitationHint("描述内容...\n配图建议：适合"), "suitable");
+  assert.equal(parseCitationHint("描述...\n配图建议: 不适合"), "unsuitable");
+  assert.equal(parseCitationHint("desc...\ncitation: suitable"), "suitable");
+  assert.equal(parseCitationHint("desc...\ncitation: UNSUITABLE"), "unsuitable");
+  assert.equal(parseCitationHint("没有标记"), "");
+  assert.equal(parseCitationHint(""), "");
+});
+
+test("buildVisionRequest：分模型提示词进入请求体", () => {
+  const bytes = Buffer.from("fakejpeg");
+  const req = buildVisionRequest(bytes, { model: "moondream2", prompt: resolveVisionPrompt("moondream2", "", {}) });
+  assert.ok(/citation: suitable/i.test(req.body.messages[0].content[0].text), "resolved prompt in body");
 });
 

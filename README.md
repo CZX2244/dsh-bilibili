@@ -101,7 +101,8 @@ dsh plugin --profile web add ./dsh-bilibili
         visionBaseUrl: ''             # 视觉服务地址，留空且 ollama = http://localhost:11434/v1
         visionModel: 'medium'         # 三档：low(2B) / medium(8B) / high(32B)，或显式模型名
         visionApiKey: ''              # 云端视觉 API Key（本地留空）
-        visionPrompt: ''              # 识图提示词（留空 = 内置默认）
+        visionPrompt: ''              # 识图提示词（留空 = 按模型自动选内置提示词）
+        visionPromptByModel: {}       # 分模型提示词覆盖（显式模型名 / low / medium / high）
         visionMaxFrames: 4            # 最多描述几张帧（控延迟）
         framesDir: ''                # 帧图输出目录，留空 = 系统临时目录/dsh-bilibili/<bvid>
         summaryTemplate: ''          # 输出模板路径，留空 = 内置 templates/summary.md
@@ -166,7 +167,11 @@ llama-server -m qwen2.5-vl-7b-q4_k_m.gguf --mmproj mmproj-qwen2.5-vl-7b-f16.gguf
 
 **云端**：任何 OpenAI 兼容接口，例如 `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel`（如 gpt-4o-mini / glm-4v-flash）+ `visionApiKey`。
 
-> 提示：本地 CPU 描述数张帧需要几十秒到几分钟（GPU 更快）；`visionMaxFrames` 控制描述帧数上限。识图提示词可用 `visionPrompt` 自定义（留空用内置默认）。
+**分模型提示词**：所有内置提示词的任务都是**理解这一帧的内容**（画面里发生了什么、展示了什么），文字只转述要点、不做逐字转录。插件会按模型自动选提示词：MiniCPM-V 家族有专属提示词、moondream2 用英文提示词、低档小模型用更短的提示词；你也可以用 `visionPrompt`（全局）或 `visionPromptByModel`（按显式模型名或档位 low/medium/high）覆盖。
+
+**配图质量把关**：视觉描述末尾会要求模型输出「配图建议：适合/不适合」（适合=画面清晰、信息明确、能帮助读者理解；不适合=纯口播/模糊/无信息量）。帧数据带 `citation_hint` 字段，总结报告**只引用「适合」的帧**，每段至多 1-2 张。
+
+> 提示：本地 CPU 描述数张帧需要几十秒到几分钟（GPU 更快）；`visionMaxFrames` 控制描述帧数上限。
 
 ---
 
