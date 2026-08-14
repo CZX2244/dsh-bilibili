@@ -4,6 +4,8 @@
 
 DeepSeek Harness 工具插件：给 Agent 添加 `bilibili_extract` 工具。发一个 B 站链接，Agent 自动提取视频文字信息（文稿/评论/弹幕）并按需抓取关键帧，完成总结分析。
 
+> 本插件不打包任何第三方二进制或模型；所调用的开源项目与服务见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ---
 
 ## ✨ 特性
