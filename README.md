@@ -154,7 +154,7 @@ DeepSeek 主模型没有视觉能力时，可开启本功能：抓帧后把每�
 | 中 | `medium`（默认） | `qwen3-vl:8b` | ~6-8 GB | 主流电脑（推荐） |
 | 高 | `high` | `qwen3-vl:32b` | ~20 GB / 建议 GPU | 高配，质量最佳 |
 
-中档备选 `minicpm-v`（MiniCPM-V 2.6，8B，中文 OCR 强）。`visionModel` 也接受显式模型名（Ollama tag 或云端模型 id）。
+中档备选 **MiniCPM-V 4.0**（面壁，2026 年新作，官方称超越 GPT-4.1-mini、手机可跑，中文 OCR 强，官方提供 GGUF/int4）。`visionModel` 也接受显式模型名（Ollama tag 或云端模型 id）。
 
 **llama.cpp（本地备选）**：用 `llama-server` 启动视觉 GGUF（模型 + mmproj），它自带 OpenAI 兼容接口：
 
@@ -162,7 +162,7 @@ DeepSeek 主模型没有视觉能力时，可开启本功能：抓帧后把每�
 llama-server -m qwen2.5-vl-7b-q4_k_m.gguf --mmproj mmproj-qwen2.5-vl-7b-f16.gguf --port 8080
 ```
 
-配置 `visionProvider: 'llama-cpp'`（默认地址 http://localhost:8080/v1）即可。llama.cpp 支持的视觉模型：Qwen2-VL / Qwen2.5-VL、MiniCPM-V 2.6、InternVL、GLM-4V、LLaVA、moondream2 等（GGUF 可在 HuggingFace 下载；Qwen3-VL 的 GGUF 视 llama.cpp 版本支持情况）。中文推荐 Qwen2.5-VL-7B（约 5GB）或 MiniCPM-V 2.6（中文 OCR 强）。
+配置 `visionProvider: 'llama-cpp'`（默认地址 http://localhost:8080/v1）即可。llama.cpp 支持的视觉模型：Qwen2-VL / Qwen2.5-VL / Qwen3-VL（视版本）、MiniCPM-V（含 4.0）、InternVL、GLM-4V、LLaVA、moondream2 等（GGUF 可在 HuggingFace 下载）。中文推荐 Qwen3-VL 系列 GGUF 或 **MiniCPM-V 4.0**（官方 GGUF，端侧优化、中文 OCR 强）。
 
 **云端**：任何 OpenAI 兼容接口，例如 `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel`（如 gpt-4o-mini / glm-4v-flash）+ `visionApiKey`。
 
