@@ -1,238 +1,242 @@
 # dsh-bilibili
 
+[**中文**](README.zh.md) | **English**
+
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-DeepSeek Harness 工具插件：给 Agent 添加 `bilibili_extract` 工具。发一个 B 站链接，Agent 自动提取视频文字信息（文稿/评论/弹幕）并按需抓取关键帧，完成总结分析。
+A DeepSeek Harness tool plugin that gives agents a `bilibili_extract` tool. Send a Bilibili link and the agent extracts the video's text information (transcript / comments / danmaku), captures keyframes on demand, and produces a summary.
 
-> 本插件不打包任何第三方二进制或模型；所调用的开源项目与服务见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
----
-
-## ✨ 特性
-
-- **文字信息全量提取**：元数据、完整字幕文稿（带时间戳，长文稿截断保留全文时间索引）、热门评论（含楼中楼）、弹幕（高频 + **密度峰时间线样本**，片头弹幕不霸榜）；**无字幕轨的视频默认用必剪 ASR 转写**（B站播放器「实时AI字幕」同款能力，匿名可用，24h 缓存），也可切换到本地引擎——**sherpa-onnx（中文推荐，SenseVoice）** 或 **whisper.cpp**（通用），离线可用、适配不同配置；单个信息源失败不影响整体（各自降级为空并带 note）；
-- **可选帧图视觉描述**：无视觉能力的主模型也能「看到」画面——帧图可交给本地 **Ollama / llama.cpp**（Qwen3-VL 2B/4B/8B 三档）或任意 OpenAI 兼容视觉接口转成文字描述，报告按需引用配图；
-- **自动选帧（纯画面信号）**：场景切换检测（>20 分钟自动切抽样式）+ 均匀间隔兜底，5 秒去重；**不做关键词猜测**——判断「文稿哪里不完整、必须看画面」是语义分析，交给主 Agent 的两段式提示词完成；
-- **清晰帧优选**：抓帧时在目标时间点 ±1.5s 内用 FFmpeg `blurdetect` 逐帧测模糊度，**自动选最清晰的那一帧**——动画入场、运动模糊、淡入淡出的糊帧会被跳过；
-- **两段式工作流**：模型先读文稿（秒级、零下载），再带 `timestamps` 定向抓帧——每帧自动配附近字幕，视频 24h 缓存复用，多轮迭代不重复下载；模型以「`[建议抓帧] mm:ss`」固定格式显式回报需要画面的时刻；
-- **输出模板可替换**：内置简洁总结模板（省时 + 可转发），`summaryTemplate` 配置可指向任意自定义模板文件；
-- **下载优先抓帧**：视频先下载到本地再从本地文件抓帧（≤30 分钟 / ≤800MB），失败或超限自动回退远程逐帧；
-- **健壮**：B 站 412 限流指数退避重试；无字幕自动识别「需登录」并提示配置 SESSDATA；ffmpeg 无管道调用，任何环境可跑。
+> This plugin bundles no third-party binaries or models; the open-source projects and services it invokes are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 
-## 🚀 安装
+## ✨ Features
 
-前置：Node 18+、`ffmpeg` 在 PATH 中、`pnpm`。
+- **Full text extraction**: metadata, complete timestamped transcript (long transcripts are truncated with a full-text time index), hot comments (with replies), danmaku (top repeated messages + **density-peak timeline samples** — opening spam no longer dominates); **videos without a subtitle track are auto-transcribed** — Bijian ASR by default (the same anonymous capability behind Bilibili's "live AI subtitles", 24h cache), or switch to local engines — **sherpa-onnx (Chinese, SenseVoice)** or **whisper.cpp** — fully offline; one failing source never breaks the rest (each degrades to empty with a note);
+- **Optional frame vision descriptions**: vision-less main models can still "see" frames — send each frame to a local **Ollama / llama.cpp** backend (Qwen3-VL 2B/4B/8B tiers) or any OpenAI-compatible vision API for a text description; the report cites images only when needed;
+- **Automatic frame selection (picture-driven only)**: scene-change detection (sampled pass beyond 20 minutes) + even-interval backfill, 5s dedupe; **no keyword guessing** — deciding "which transcript moments are incomplete and need visuals" is semantic analysis, left to the main agent's two-pass prompts;
+- **Sharp-frame preference**: within ±1.5s of each target time, FFmpeg `blurdetect` scores every frame and the **sharpest one wins** — motion-blurred animation entrances and fade frames are skipped;
+- **Two-pass workflow**: the agent reads the transcript first (instant, zero download), then requests frames with explicit `timestamps` — each frame is captioned with its nearby subtitle; the agent reports needed moments in a fixed `[建议抓帧] mm:ss` format; 24h video cache reuse across passes;
+- **Replaceable output template**: a concise shareable summary template is bundled; `summaryTemplate` can point to any custom template file;
+- **Download-first capture**: the video is downloaded locally before frame extraction (≤30 min / ≤800MB), with automatic fallback to remote per-frame extraction;
+- **Robust**: exponential backoff on Bilibili 412 rate limits; login-required subtitles are detected with a SESSDATA hint; ffmpeg runs pipe-free, so it works in any environment.
+
+---
+
+## 🚀 Installation
+
+Prerequisites: Node 18+, `ffmpeg` on PATH, `pnpm`.
 
 ```sh
-# 方式一：从 GitHub 安装（推荐）
+# Option 1: install from GitHub (recommended)
 dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
 
-# 方式二：本地目录（开发用，link 模式改代码即生效）
+# Option 2: local directory (development; link mode applies changes instantly)
 dsh plugin --profile web add ./dsh-bilibili
 
-# 重启 web profile（dsh web），新会话中即可使用 bilibili_extract 工具
+# Restart the web profile (dsh web); bilibili_extract becomes available in new sessions
 ```
 
-安装后工具自动进入 Agent 的工具链：用户在对话里发 B 站链接（`bilibili.com/video/BV...`、`b23.tv` 短链或裸 BV 号），模型即可调用它分析。
+After installation the tool joins the agent's toolchain: when the user sends a Bilibili link (`bilibili.com/video/BV...`, a `b23.tv` short link, or a bare BV id), the model can call it for analysis.
 
 ---
 
-## 🎨 自定义输出模板
+## 🎨 Custom output templates
 
-输出格式是插件的**可替换零件**：数据（文稿/帧/弹幕/评论）由工具提供，长什么样由模板决定。
+The output format is a **replaceable part** of the plugin: the tool provides the data (transcript / frames / danmaku / comments), the template decides what it looks like.
 
-- **内置默认**：`templates/summary.md` —— 简洁的「省时间」总结（一句话总结 → 带时间戳要点 → 值得看的片段 → 可转发的分享语）；
-- **内置备选**：`templates/timeline.md` —— 通用时间轴式（主标题 → 开场钩子 → 时间轴分段小标题 + 内嵌时间戳要点 → 配图锚点 → 结尾结论），配图能配就配、配不了不强凑；
-- **换模板**：在配置里设 `summaryTemplate: 'C:/path/我的模板.md'`，指向你自己的模板文件；
-- **改默认**：直接编辑插件目录里的 `templates/summary.md`；
-- **无效路径自动回退**内置模板，工具永不因模板问题失效。
+- **Bundled default**: `templates/summary.md` — a concise "time-saver" summary (one-sentence takeaway → timestamped key points → worth-watching segments → shareable closing lines);
+- **Bundled alternative**: `templates/timeline.md` — a generic time-axis format (title → hook → timestamped sections with inline points → image anchors → conclusion); add images only when they help, never force them;
+- **Switch templates**: set `summaryTemplate: 'C:/path/my-template.md'` in the config;
+- **Change the default**: edit `templates/summary.md` directly in the plugin directory;
+- An invalid custom path falls back to the bundled template, so the tool never breaks because of a template.
 
-如需更丰富的输出格式（学习笔记/评测表/时间线/复习卡等），可安装配套技能 `bilibili-video-analyzer`（A-K 格式目录），Agent 会按用户需求选用。
-
----
-
-## 🧠 推荐工作流（两段式，主路径：提示词驱动）
-
-**抓帧不是靠关键词自动猜，而是由主 Agent 用系统提示里的一套分析提示词，读完文稿后自己判断**哪些位置「离开画面就不完整」、必须看画面。系统提示内置的「内容完整性检查」教模型找五类信息缺失——**指代悬空 / 结论先行 / 操作无口述 / 无声演示 / 视觉对比**，并显式回报：
-
-```
-① bilibili_extract(url, extract_frames: false)      # 只拿文字，秒级、零下载
-② agent 逐段检查文稿的「信息缺失」位置，确定必须看画面的时间点
-③ agent 在回复末尾以 [建议抓帧] mm:ss 理由 列出清单，再带 timestamps 定向抓帧——插件先在该时间点 ±4s 内用 FFmpeg 场景检测**对齐到画面变化最明显的帧**，再在 ±1.5s 内用 blurdetect **选最清晰的帧**（语义定位 → 画面精修 → 清晰度把关）
-④ 依据帧的 description/citation_hint（或 read_image）判断报告里引用哪些图
-```
-
-> 兜底：**单次调用**（不传 `timestamps`）时，插件才用自动选帧——纯画面信号：场景切换（>20 分钟抽样式）+ 均匀间隔。这是给「模型没走两段式」时的保险，不包含任何关键词猜测。
+For richer output formats (study notes, review tables, timelines, Q&A cards, etc.), install the companion skill `bilibili-video-analyzer` (an A–K format catalog) and the agent picks by user intent.
 
 ---
 
-## 🔧 配置
+## 🧠 Recommended workflow (two-pass; prompt-driven is the primary path)
 
-默认值写在 `cordis.patch.yml`，可在 `$DSH_HOME/profiles/web/cordis.patch.yml` 覆盖（后写覆盖整行 config）：
+**Frame selection is not keyword guessing** — the main agent uses the analysis prompts injected into the system prompt to read the transcript and decide **which moments are incomplete without the picture**. The built-in "content-completeness check" teaches the agent five gap types — **dangling reference / conclusion without data / unspoken operations / silent demos / visual comparisons** — and asks it to report them explicitly:
+
+```
+① bilibili_extract(url, extract_frames: false)      # text only: instant, zero download
+② the agent scans the transcript for information gaps and picks the moments that need visuals
+③ the agent lists them as [建议抓帧] mm:ss reason, then calls again with timestamps —
+   the plugin aligns each moment to the most changed frame within ±4s (FFmpeg scene detection),
+   then picks the sharpest frame within ±1.5s (blurdetect): semantic targeting → picture refinement → sharpness gate
+④ the agent decides which images to cite in the report using description/citation_hint (or read_image)
+```
+
+> Fallback: only a **single call** (no `timestamps`) uses automatic selection — purely picture-driven: scene changes (sampled pass beyond 20 min) + even-interval backfill. That's insurance for "the model skipped the two-pass flow", with no keyword guessing.
+
+---
+
+## 🔧 Configuration
+
+Defaults live in `cordis.patch.yml`; override any field in `$DSH_HOME/profiles/web/cordis.patch.yml` (later layers win per row):
 
 ```yaml
 - override:
     - id: bilibili
       config:
-        sessdata: '你的B站SESSDATA'  # 可选，解锁登录态字幕/更多评论
-        commentLimit: 20             # 评论抓取数量上限
-        maxFrames: 6                 # 最大抓帧数
-        extractFrames: true          # 是否抓帧（false = 纯文字模式）
-        downloadVideo: true          # 抓帧前先下载视频到本地（推荐）
-        keepVideo: false             # true = 永久保留下载的视频文件
-        maxVideoMinutes: 30          # 超过此时长的视频不下载，远程逐帧
-        maxDownloadMb: 800           # 下载大小上限（MB）
+        sessdata: ''                 # optional Bilibili SESSDATA (logged-in subtitles / more comments)
+        commentLimit: 20             # max comments to fetch
+        maxFrames: 6                 # max keyframes
+        extractFrames: true          # false = text-only mode
+        downloadVideo: true          # download video locally before capture (recommended)
+        keepVideo: false             # true = keep downloaded video files
+        maxVideoMinutes: 30          # videos longer than this are captured remotely per frame
+        maxDownloadMb: 800           # download size cap (MB)
         quality: 32                  # 16=360p 32=480p 64=720p 80=1080p
-        detectScenes: true           # 场景切换检测（>20 分钟视频自动跳过）
-        sceneThreshold: 0.4          # 场景切换阈值 0-1，越大越严格
-        asrProvider: 'bcut'          # ASR 引擎：bcut(必剪,默认) | sherpa-onnx(中文推荐) | whisper-local | auto | none
-        sherpaBin: ''                # sherpa-onnx-offline 可执行文件路径
-        sherpaModel: ''              # sherpa 模型 onnx 路径（SenseVoice/Paraformer）
+        detectScenes: true           # scene-change detection (sampled pass beyond 20 min)
+        sceneThreshold: 0.4          # scene threshold 0-1, higher = stricter
+        sharpFrames: true            # sharp-frame preference: blurdetect picks the sharpest frame within ±1.5s
+        asrProvider: 'bcut'          # ASR engine: bcut (default) | sherpa-onnx (Chinese) | whisper-local | auto | none
+        sherpaBin: ''                # sherpa-onnx-offline binary path
+        sherpaModel: ''              # sherpa model onnx path (SenseVoice/Paraformer)
         sherpaModelType: 'sense-voice'  # sense-voice | paraformer | zipformer2-ctc
-        sherpaTokens: ''             # sherpa tokens.txt 路径
-        sherpaThreads: 0             # sherpa CPU 线程数（0=自动）
-        whisperBin: 'whisper-cli'    # whisper.cpp 可执行文件（PATH 或绝对路径）
-        whisperModel: 'medium'       # 模型三档：small(低) / medium(中) / large-v3(高)，或 ggml-*.bin 路径
-        whisperModelDir: ''          # 模型目录，留空 = <whisperBin 同目录>/models
-        whisperLanguage: 'zh'        # 转写语言
-        whisperThreads: 0            # whisper CPU 线程数（0=自动）
-        visionProvider: 'none'        # 帧图视觉描述：none(默认) | ollama | llama-cpp | openai-compatible
-        visionBaseUrl: ''             # 视觉服务地址，留空且 ollama = http://localhost:11434/v1
-        visionModel: 'medium'         # 三档：low(2B) / medium(4B) / high(8B)，或显式模型名
-        visionApiKey: ''              # 云端视觉 API Key（本地留空）
-        visionPrompt: ''              # 识图提示词（留空 = 按模型自动选内置提示词）
-        visionPromptByModel: {}       # 分模型提示词覆盖（显式模型名 / low / medium）
-        visionMaxFrames: 4            # 最多描述几张帧（控延迟）
-        framesDir: ''                # 帧图输出目录，留空 = 系统临时目录/dsh-bilibili/<bvid>
-        summaryTemplate: ''          # 输出模板路径，留空 = 内置 templates/summary.md
-        timeoutMs: 300000            # 工具整体超时（毫秒）
+        sherpaTokens: ''             # sherpa tokens.txt path
+        sherpaThreads: 0             # sherpa CPU threads (0 = auto)
+        whisperBin: 'whisper-cli'    # whisper.cpp binary (PATH or absolute path)
+        whisperModel: 'medium'       # small / medium / large-v3, or a ggml-*.bin path
+        whisperModelDir: ''          # model dir; empty = <whisperBin dir>/models
+        whisperLanguage: 'zh'        # transcription language
+        whisperThreads: 0            # whisper CPU threads (0 = auto)
+        visionProvider: 'none'       # frame vision: none (default) | ollama | llama-cpp | openai-compatible
+        visionBaseUrl: ''            # vision endpoint; empty + ollama = http://localhost:11434/v1
+        visionModel: 'medium'        # low(2B) / medium(4B) / high(8B), or an explicit model name
+        visionApiKey: ''             # cloud vision API key (empty for local)
+        visionPrompt: ''             # vision prompt (empty = built-in per-model default)
+        visionPromptByModel: {}      # per-model prompt overrides (explicit model name / low / medium)
+        visionMaxFrames: 6           # max frames to describe (aligned with maxFrames)
+        framesDir: ''                # frame output dir; empty = system temp/dsh-bilibili/<bvid>
+        summaryTemplate: ''          # template path; empty = bundled templates/summary.md
+        timeoutMs: 300000            # overall tool timeout (ms)
 ```
 
-### 本地 ASR 转写（可选，中文推荐 sherpa-onnx）
+### Local ASR transcription (optional; sherpa-onnx recommended for Chinese)
 
-无字幕视频默认走必剪（零配置、匿名、国内直连）。想离线、或必剪不可用时，可切换到本地引擎。**插件不打包模型，只提供接口，模型与二进制需自行下载**（本地离线推理的物理前提，但不涉及任何 API key / 额度 / 付费）。
+No-subtitle videos default to Bijian (zero config, anonymous, China-friendly). To go fully offline or when Bijian fails, switch to a local engine. **The plugin ships no models — only the interface; models and binaries are downloaded by the user** (no API keys, quotas, or fees involved).
 
-#### 推荐：sherpa-onnx（中文，SenseVoice）
+#### Recommended: sherpa-onnx (Chinese, SenseVoice)
 
-B 站以中文内容为主，SenseVoice 的中文识别率明显高于 Whisper，且速度更快、模型更小；模型官方托管在 ModelScope（国内直连、下载快）。
+Bilibili is mostly Chinese content, and SenseVoice beats Whisper on Chinese accuracy while being faster and smaller; official models are hosted on ModelScope (fast in China).
 
-| 档位 | 推荐模型 | 体积（约） | 适用 |
-|------|----------|-----------|------|
-| 低 | SenseVoiceSmall（int8） | ~230 MB | 低配电脑 |
-| 中 | SenseVoiceSmall（fp32） | ~900 MB | 主流电脑（推荐） |
-| 高 | Paraformer-large | ~2.5 GB | 高配电脑 / 极致精度 |
+| Tier | Recommended model | Size (approx) | For |
+|------|-------------------|---------------|-----|
+| Low | SenseVoiceSmall (int8) | ~230 MB | low-end machines |
+| Mid | SenseVoiceSmall (fp32) | ~900 MB | mainstream (recommended) |
+| High | Paraformer-large | ~2.5 GB | high-end / maximum accuracy |
 
-步骤：
+Steps:
 
-1. 从 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 下载对应系统的 `sherpa-onnx-offline` 可执行文件；
-2. 下载模型（`model.onnx` + `tokens.txt`），SenseVoice 模型可在 [ModelScope](https://modelscope.cn) 或 sherpa-onnx 的模型列表获取；
-3. 配置里设 `asrProvider: 'sherpa-onnx'`，并填 `sherpaBin` / `sherpaModel` / `sherpaTokens`（`sherpaModelType` 默认 `sense-voice`）。
+1. Download the `sherpa-onnx-offline` binary for your OS from [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx);
+2. Download a model (`model.onnx` + `tokens.txt`) — SenseVoice models are on [ModelScope](https://modelscope.cn) or the sherpa-onnx model list;
+3. Set `asrProvider: 'sherpa-onnx'` and fill `sherpaBin` / `sherpaModel` / `sherpaTokens` (`sherpaModelType` defaults to `sense-voice`).
 
-#### 备选：whisper.cpp（通用 / 英文）
+#### Alternative: whisper.cpp (general / English)
 
-| 档位 | whisperModel | 模型文件 | 体积 | 适用 |
-|------|--------------|----------|------|------|
-| 低 | `small` | `ggml-small.bin` | ~466 MB | 低配电脑 / 快速出稿 |
-| 中 | `medium` | `ggml-medium.bin` | ~1.5 GB | 主流电脑 |
-| 高 | `large-v3` | `ggml-large-v3.bin` | ~3 GB | 高配电脑 |
+| Tier | whisperModel | Model file | Size | For |
+|------|--------------|------------|------|-----|
+| Low | `small` | `ggml-small.bin` | ~466 MB | low-end / fast drafts |
+| Mid | `medium` | `ggml-medium.bin` | ~1.5 GB | mainstream |
+| High | `large-v3` | `ggml-large-v3.bin` | ~3 GB | high-end |
 
-1. 从 [whisper.cpp](https://github.com/ggml-org/whisper.cpp) 下载 `whisper-cli` 可执行文件；
-2. 下载对应档位的 `ggml-*.bin` 模型，放到 `models/` 目录；
-3. 配置里设 `asrProvider: 'whisper-local'` 并填 `whisperBin` / `whisperModel`。
+1. Download `whisper-cli` from [whisper.cpp](https://github.com/ggml-org/whisper.cpp);
+2. Download the matching `ggml-*.bin` model into a `models/` directory;
+3. Set `asrProvider: 'whisper-local'` and fill `whisperBin` / `whisperModel`.
 
-> 提示：`asrProvider: 'auto'` 会按「必剪 → sherpa-onnx → whisper-local」依次降级；中文内容建议至少 `medium`（whisper）或直接选 SenseVoice（sherpa）。sherpa-onnx 的 CLI 参数随版本略有差异，如遇报错请以你所用版本的 `--help` 为准调整。
+> Note: `asrProvider: 'auto'` falls back in order Bijian → sherpa-onnx → whisper-local. For Chinese, use at least `medium` (whisper) or pick SenseVoice (sherpa) directly. sherpa-onnx CLI flags vary slightly across versions — check `--help` of your build if something errors.
 
-### 🔍 帧图视觉描述（可选）
+### 🔍 Frame vision descriptions (optional)
 
-DeepSeek 主模型没有视觉能力时，可开启本功能：抓帧后把每帧交给**视觉模型**转成文字描述（随帧返回 `description` 字段），主模型据此判断报告里**哪些画面值得引用**——仅当内容需要视觉确认（图表/界面/演示细节）时才配图，纯口播画面不配图。默认关闭；视觉服务失败不影响主流程（帧路径照常返回）。
+When the main model has no vision, enable this feature: each captured frame is sent to a **vision model** and returned with a `description` field, so the main model can decide **which images to cite in the report** — cite only when visual confirmation matters (charts / UIs / demo details); pure talking-head frames are not cited. Off by default; a vision failure never breaks the main flow (frame paths are still returned).
 
-**本地（推荐）**：安装 [Ollama](https://ollama.com) 后拉取模型即可，无 key、离线、不花钱：
+**Local (recommended)**: install [Ollama](https://ollama.com) and pull a model — no keys, offline, free:
 
-| 档位 | visionModel | Ollama 模型 | 内存需求（约） | 适用 |
-|------|-------------|-------------|---------------|------|
-| 低 | `low` | `qwen3-vl:2b` | ~2 GB | 超低配电脑 |
-| 中 | `medium`（默认） | `qwen3-vl:4b` | ~4 GB | 低配-主流电脑（推荐） |
-| 高 | `high` | `qwen3-vl:8b` | ~6-8 GB | 主流电脑，质量最佳 |
+| Tier | visionModel | Ollama model | RAM (approx) | For |
+|------|-------------|--------------|--------------|-----|
+| Low | `low` | `qwen3-vl:2b` | ~2 GB | ultra low-end |
+| Mid | `medium` (default) | `qwen3-vl:4b` | ~4 GB | low-end to mainstream (recommended) |
+| High | `high` | `qwen3-vl:8b` | ~6-8 GB | mainstream, best quality |
 
-想要更大模型直接填显式模型名（如 `qwen3-vl:32b`），插件原样透传——只是不再作为默认档位推荐。
+Larger models can be passed as explicit names (e.g. `qwen3-vl:32b`) — they are just no longer a default tier.
 
-中档备选 **MiniCPM-V 4.0**（面壁，2026 年新作，官方称超越 GPT-4.1-mini、手机可跑，官方提供 GGUF/int4；其 Ollama tag 名称请以官方库为准）。`visionModel` 也接受显式模型名（Ollama tag 或云端模型 id）。
+Mid-tier alternative **MiniCPM-V 4.0** (OpenBMB, 2026; officially claims to surpass GPT-4.1-mini, runs on phones; official GGUF/int4 releases — check the official library for its Ollama tag). `visionModel` also accepts explicit model names (Ollama tags or cloud model ids).
 
-**其他非千问模型（2026-08 已在 Ollama 官方库核实）**：`minicpm-v:8b`（面壁 MiniCPM-V 2.6，中文 OCR 强）、`moondream`（1.9B，英文为主）、`gemma3n`（谷歌，英文为主）。**Kimi-VL / InternVL / GLM-4V 暂不在 Ollama 官方库**——可通过 llama.cpp 的社区 GGUF 或云端 OpenAI 兼容接口（如 Moonshot/智谱 API）使用；MiniCPM-V 4.0 官方 GGUF 走 llama-cpp 路线即可。
+**Other non-Qwen models (verified on the Ollama library, 2026-08)**: `minicpm-v:8b` (OpenBMB MiniCPM-V 2.6, strong Chinese OCR), `moondream` (1.9B, English-first), `gemma3n` (Google, English-first). **Kimi-VL / InternVL / GLM-4V are not in the official Ollama library** — use community GGUFs via llama.cpp or cloud OpenAI-compatible APIs (e.g. Moonshot / Zhipu). MiniCPM-V 4.0's official GGUF works on the llama-cpp route.
 
-> 选型依据：本任务是「**理解画面内容 + 输出配图建议**」而非 OCR 转录，权重放在**中文场景理解与指令遵循**上，因此默认三档用同族 Qwen3-VL（2B/4B/8B，行为一致、提示词可共用）；追求极致端侧省资源可选 MiniCPM-V 4.0。
+> Selection rationale: this task is **understanding frame content + emitting a citation hint**, not OCR transcription — the weights are on Chinese scene understanding and instruction-following, so the default tiers use the Qwen3-VL family (consistent behavior, shared prompts); MiniCPM-V 4.0 for maximum edge efficiency.
 
-**llama.cpp（本地备选）**：用 `llama-server` 启动视觉 GGUF（模型 + mmproj），它自带 OpenAI 兼容接口；`visionModel` 就是启动时 `--alias` 设置的名字——把别名设成档位关键词对应的名字，即可直接复用档位配置：
+**llama.cpp (local alternative)**: run `llama-server` with a vision GGUF (model + mmproj); it exposes an OpenAI-compatible API, and `visionModel` is simply the `--alias` you set at launch — matching the alias to a tier keyword reuses the tier config directly:
 
 ```sh
 llama-server -m qwen3-vl-8b-q4_k_m.gguf --mmproj mmproj-qwen3-vl-8b.gguf --port 8080 --alias qwen3-vl:8b
-# 插件配置：visionProvider: 'llama-cpp' + visionModel: 'medium'
+# plugin config: visionProvider: 'llama-cpp' + visionModel: 'medium'
 ```
 
-三档推荐以**千问 Qwen3-VL 为主**：低档 Qwen3-VL-2B、中档 Qwen3-VL-4B（默认）、高档 Qwen3-VL-8B。GGUF 已核实：官方 `Qwen/Qwen3-VL-4B/8B-Thinking-GGUF`（含 mmproj）、社区 `unsloth/Qwen3-VL-4B-Instruct-GGUF` 等；若所用 llama.cpp 版本暂不支持 Qwen3-VL 架构，可先改用 Qwen2.5-VL-7B-Instruct-GGUF（ModelScope 官方）。llama.cpp 还支持 MiniCPM-V（含 4.0）、InternVL、GLM-4V、LLaVA、gemma3n、moondream2 等架构。
+The three tiers are Qwen3-VL-first: low Qwen3-VL-2B, mid Qwen3-VL-4B (default), high Qwen3-VL-8B. Verified GGUFs: official `Qwen/Qwen3-VL-4B/8B-Thinking-GGUF` (with mmproj), community `unsloth/Qwen3-VL-4B-Instruct-GGUF`, etc. If your llama.cpp build doesn't support the Qwen3-VL architecture yet, fall back to Qwen2.5-VL-7B-Instruct-GGUF (official on ModelScope). llama.cpp also supports MiniCPM-V (incl. 4.0), InternVL, GLM-4V, LLaVA, gemma3n, moondream2, and more.
 
-**云端**：任何 OpenAI 兼容接口，例如 `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel` + `visionApiKey`。单帧描述任务不需要旗舰多模态，便宜档即可：GLM-4V-Flash（中文有免费额度）/ GPT-4o-mini / 硅基流动 Qwen-VL 系列。
+**Cloud**: any OpenAI-compatible endpoint via `visionProvider: 'openai-compatible'` + `visionBaseUrl` + `visionModel` + `visionApiKey`. Single-frame description doesn't need flagship multimodal models — budget tiers suffice: GLM-4V-Flash (free quota for Chinese) / GPT-4o-mini / SiliconFlow Qwen-VL.
 
-**分模型提示词**：所有内置提示词的任务都是**理解这一帧的内容**（画面里发生了什么、展示了什么），文字只转述要点、不做逐字转录。插件会按模型自动选提示词：MiniCPM-V 家族有专属提示词、moondream2 用英文提示词、低档小模型用更短的提示词；你也可以用 `visionPrompt`（全局）或 `visionPromptByModel`（按显式模型名或档位 low/medium）覆盖。
+**Per-model prompts**: every built-in prompt's task is **understanding the frame's content** (what's happening, what's shown) — visible text is paraphrased as key points only, never transcribed. The plugin picks prompts automatically per model (MiniCPM-V family gets a dedicated prompt, moondream2 gets English, small low-tier models get a shorter prompt); override with `visionPrompt` (global) or `visionPromptByModel` (per explicit model name or low/medium tier).
 
-**配图质量把关**：视觉描述末尾会要求模型输出「配图建议：适合/不适合」（适合=画面清晰、信息明确、能帮助读者理解；不适合=纯口播/模糊/无信息量）。帧数据带 `citation_hint` 字段，总结报告**只引用「适合」的帧**，每段至多 1-2 张。
+**Citation quality gate**: every vision description must end with a single line 「配图建议：适合/不适合」 (suitable = clear, informative, helps readers understand; unsuitable = talking head, blurry, or uninformative). Frames carry a `citation_hint` field, and reports cite **only suitable frames**, at most 1-2 per section.
 
-**2B 实测结论**（2026-08，llama.cpp b10428 + Qwen3-VL-2B-Instruct-Q4_K_M，16 线程 CPU，7 张已知内容测试图）：配图建议输出 100% 稳定；图表数值（120/240/180/300 万元）与海报数字（32%/500 万/三轮融资）与原文完全一致；纯口播画面正确判「不适合」；单张 4-9 秒。低档 2B 的短提示词已按实测调优（含防幻觉与判定标准）。
+**2B measured results** (2026-08, llama.cpp b10428 + Qwen3-VL-2B-Instruct-Q4_K_M, 16-thread CPU, 7 ground-truth test images): 100% citation-tail stability; chart values (120/240/180/300) and poster numbers (32% / 5M / three rounds) matched exactly; talking-head frames correctly marked unsuitable; 4-9s per frame. The low-tier short prompt was tuned from these live runs (anti-hallucination + citation criteria).
 
-> 提示：本地 CPU 描述数张帧需要几十秒到几分钟（GPU 更快）；`visionMaxFrames` 控制描述帧数上限。
+> Note: describing several frames on a CPU takes tens of seconds to minutes (faster on GPU); `visionMaxFrames` caps the count.
 
 ---
 
-## 📁 项目结构
+## 📁 Project structure
 
 ```
 dsh-bilibili/
 ├── lib/
-│   ├── index.js        # Cordis 插件入口：注册工具 + 系统提示指引 + 配置 schema
-│   ├── extractor.js    # 提取层：B站 API + 下载模块 + 场景检测 + ffmpeg 抓帧
-│   ├── keyframes.js    # 纯函数：自动选帧（纯画面信号）、时间格式化
-│   └── format.js       # 纯函数：提取结果 → 模型可见文本摘要
-├── templates/summary.md  # 内置默认输出模板（可替换）
-├── test/                 # 单元测试（node --test）
-├── cordis.patch.yml      # bundle 补丁层（被插件系统识别）
-└── package.json          # dsh.bundle.patch 声明 + peer 依赖
+│   ├── index.js        # Cordis plugin entry: tool registration + system prompt + config schema
+│   ├── extractor.js    # extraction layer: Bilibili API + downloads + scene detection + ffmpeg capture
+│   ├── keyframes.js    # pure functions: automatic frame selection (picture-driven), time formatting
+│   └── format.js       # pure functions: extraction result → model-facing text digest
+├── templates/summary.md  # bundled default output template (replaceable)
+├── test/                 # unit tests (node --test)
+├── cordis.patch.yml      # bundle patch layer (recognized by the plugin system)
+└── package.json          # dsh.bundle.patch declaration + peer dependencies
 ```
 
 ---
 
-## 🔌 插件标准
+## 🔌 Plugin standard
 
-本插件遵循 DeepSeek Harness 插件标准：npm 包声明 `dsh.bundle.patch` → `dsh plugin add` 安装后自动 reconcile 进 `dsh.profile.bundles` → 重启 profile 后由 Cordis loader 挂载。标准详见 [deepseek-harness 仓库](https://github.com/deepseek-ai/deepseek-harness)。
+This plugin follows the DeepSeek Harness plugin standard: the npm package declares `dsh.bundle.patch` → `dsh plugin add` reconciles it into `dsh.profile.bundles` → the Cordis loader mounts it after a profile restart. See the [deepseek-harness repo](https://github.com/deepseek-ai/deepseek-harness) for the standard.
 
 ---
 
-## 🛠️ 本地开发（link 模式）
+## 🛠️ Local development (link mode)
 
-`dsh plugin add` 对本地目录用 `link:` 安装（改代码即生效）。由于 ESM 按真实路径解析依赖，插件目录需要一条指向 profile node_modules 的 junction：
+`dsh plugin add` installs local directories via `link:` (changes take effect immediately). Because ESM resolves dependencies by real path, the plugin directory needs a junction pointing at the profile's node_modules:
 
 ```powershell
 New-Item -ItemType Junction -Path ".\node_modules\@deepseek-ai" `
   -Target "$env:USERPROFILE\.dsh\profiles\node_modules\@deepseek-ai"
 ```
 
-改动后重启 web profile 即生效。
+Restart the web profile after changes.
 
 ---
 
-## ⚠️ 限制
+## ⚠️ Limitations
 
-- 多分 P 视频当前只取第一 P；
-- 无字幕轨的视频默认用必剪 ASR 转写文稿，可切本地 sherpa-onnx / whisper.cpp；转写结果可能有识别错误，返回中会如实标注；
-- 必剪 ASR 是匿名接口，高频连续调用可能被限流（返回错误）；需要高频/稳定转写时建议 `asrProvider: 'auto'`（自动降级）或直接切本地 sherpa-onnx；
-- 帧图落盘不自动清理（便于模型随时 read_image），代价是磁盘占用；
-- Node fetch 不读系统代理环境变量，需要代理的网络环境待适配；
-- 场景检测对 >20 分钟视频自动跳过（全片解码耗时）。
+- Multi-part videos: only part 1 is handled for now;
+- Videos without subtitles are transcribed via Bijian ASR by default (local sherpa-onnx / whisper.cpp available); transcripts may contain recognition errors and are labeled as such in the result;
+- Bijian ASR is an anonymous endpoint and may rate-limit rapid repeated calls (returns errors); for frequent/stable transcription prefer `asrProvider: 'auto'` or a local sherpa-onnx setup;
+- Frame images are not auto-cleaned (so the model can read_image anytime) — that costs disk space;
+- Node's fetch doesn't read system proxy env vars; proxied networks are pending support;
+- Scene detection switches to a sampled pass beyond 20 minutes (full decode cost).
 
 ---
 
 ## 📄 License
 
 [MIT](LICENSE)
-

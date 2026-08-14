@@ -8,7 +8,9 @@
     "lib/**/*.js",
     "templates/**/*.md",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "README.zh.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "license": "MIT",
   "dsh": {
