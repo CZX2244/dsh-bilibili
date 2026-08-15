@@ -70,6 +70,8 @@ For richer output formats (study notes, review tables, timelines, Q&A cards, etc
 
 > Fallback: only a **single call** (no `timestamps`) uses automatic selection — purely picture-driven: scene changes (sampled pass beyond 20 min) + even-interval backfill. That's insurance for "the model skipped the two-pass flow", with no keyword guessing.
 
+> Precision note: captured frame times may differ from the requested time by up to about ±0.5s (fast seek depends on keyframe spacing), and more after scene alignment and sharp-frame refinement — the exact requested moment is shown per frame as `原始请求` in the report.
+
 ---
 
 ## 🔧 Configuration
