@@ -20,13 +20,22 @@ dsh-bilibili 本体以 [MIT](LICENSE) 许可发布。本插件**不打包、不�
 | Ollama | 本地视觉服务（帧图视觉描述，`visionProvider: ollama`） | [MIT](https://github.com/ollama/ollama/blob/main/LICENSE) |
 | llama.cpp（llama-server） | 本地视觉服务（帧图视觉描述，`visionProvider: llama-cpp`） | [MIT](https://github.com/ggml-org/llama.cpp/blob/master/LICENSE) |
 
-## 本地 ASR 模型（用户自行下载，插件不分发）
+## 本地 ASR / 视觉模型（用户自行下载，插件不分发）
+
+### ASR 模型
 
 | 模型 | 来源 | 许可证 |
 | --- | --- | --- |
-| Whisper GGML 模型（`ggml-*.bin`） | OpenAI whisper.cpp 模型发布 | MIT |
-| SenseVoice / Paraformer | 阿里达摩院 FunASR（ModelScope / sherpa-onnx 发布） | Apache-2.0 |
-| Qwen3-VL 系列 / MiniCPM-V | 阿里通义 / 面壁智能（经 Ollama 或云端接口调用） | Apache-2.0 |
+| Whisper GGML 模型（`ggml-*.bin`） | OpenAI Whisper 权重经 whisper.cpp 社区转换为 GGML 格式发布（[huggingface.co/ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)） | MIT（OpenAI Whisper 权重） |
+| SenseVoice / Paraformer | 阿里达摩院 FunASR 训练，sherpa-onnx 模型库发布（[k2-fsa/sherpa-onnx 模型下载页](https://k2-fsa.github.io/sherpa/onnx/sense-voice/index.html)） | Apache-2.0 |
+
+### 视觉模型（经 Ollama / llama.cpp / OpenAI 兼容接口调用，模型由用户拉取）
+
+| 模型 | 上游 | 许可证 |
+| --- | --- | --- |
+| Qwen3-VL 系列 | 阿里通义（[QwenLM/Qwen3-VL](https://github.com/QwenLM/Qwen3-VL)） | Apache-2.0 |
+| MiniCPM-V 系列 | 面壁智能 OpenBMB（[OpenBMB/MiniCPM-V](https://github.com/OpenBMB/MiniCPM-V)） | Apache-2.0 |
+| moondream2 | [vikhyat/moondream](https://github.com/vikhyat/moondream)（插件为其内置英文提示词：中文指令遵循较弱） | Apache-2.0 |
 
 ## 登录流程实现参考
 
@@ -36,7 +45,7 @@ dsh-bilibili 本体以 [MIT](LICENSE) 许可发布。本插件**不打包、不�
 
 ## 网络服务（非开源组件）
 
-- **Bilibili Web API**（api.bilibili.com、comment.bilibili.com 等）：元数据、字幕、评论、弹幕、音视频流。
-- **Bilibili 必剪（Bcut）ASR**：无字幕轨时的默认转写服务（B 站播放器「实时 AI 字幕」同款能力）。属 Bilibili 平台能力、匿名接口，存在限流与接口变更风险；返回文稿可能含识别错误。
+- **Bilibili Web API**（api.bilibili.com、comment.bilibili.com、passport.bilibili.com 登录接口等）：元数据、字幕、评论、弹幕、音视频流与扫码登录。
+- **Bilibili 必剪（Bcut）ASR**（member.bilibili.com）：无字幕轨时的默认转写服务（B 站播放器「实时 AI 字幕」同款能力）。属 Bilibili 平台能力、匿名接口，存在限流与接口变更风险；返回文稿可能含识别错误。
 - **OpenAI 兼容视觉接口**（可选，`visionProvider: openai-compatible`）：如 OpenAI、智谱、硅基流动等第三方视觉服务，由用户自行配置地址与密钥。
 - **QR 码渲染服务**（api.qrserver.com，备用 api.liantu.com）：仅用于把 B 站登录链接渲染为二维码图片，便于在聊天界面直接展示扫码；离线时可直接打开返回的登录链接，用 B 站 App 扫码。
