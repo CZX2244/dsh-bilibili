@@ -225,6 +225,13 @@ test("normalizeRequestedTimestamps：输出带 requested_time 原值", () => {
   assert.equal(normalizeRequestedTimestamps([999], 120, 6, segs), null, "out of range -> null");
 });
 
+test("normalizeRequestedTimestamps：5 秒去重", () => {
+  const plan = normalizeRequestedTimestamps([10.0, 10.2, 10.4, 40], 120, 6, []);
+  assert.equal(plan.length, 2, "near duplicates dropped");
+  assert.deepEqual(plan.map((p) => p.time), [10, 40], "keeps first of each cluster, sorted ascending");
+  assert.deepEqual(plan.map((p) => p.requested_time), [10, 40], "requested_time survives dedupe");
+});
+
 test("parseBlurMetadata：解析模糊分并选出最清晰帧", () => {
   const text = [
     "frame:0 pts:0 pts_time:0",
