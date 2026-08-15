@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak, parseBlurMetadata } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak, parseBlurMetadata, normalizeRequestedTimestamps } from "../lib/extractor.js";
 import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks } from "../lib/format.js";
 
 const SUBTITLE_SEGS = [
@@ -211,6 +211,18 @@ test("pickNearestPeak：取距离中心最近的场景峰", () => {
   assert.equal(pickNearestPeak(peaks, 14).time, 13.2, "nearest peak picked");
   assert.equal(pickNearestPeak([], 14), null, "empty -> null");
   assert.equal(pickNearestPeak(peaks, NaN), null, "bad center -> null");
+});
+
+test("normalizeRequestedTimestamps：输出带 requested_time 原值", () => {
+  const segs = [{ start: 0, end: 5, text: "第一句" }];
+  const plan = normalizeRequestedTimestamps([3.2, 40], 120, 6, segs);
+  assert.equal(plan.length, 2);
+  assert.equal(plan[0].time, 3.2);
+  assert.equal(plan[0].requested_time, 3.2, "requested_time keeps the original value");
+  assert.equal(plan[0].reason, "requested timestamp");
+  assert.equal(plan[0].text, "第一句", "subtitle caption still works");
+  assert.equal(normalizeRequestedTimestamps([], 120, 6, segs), null);
+  assert.equal(normalizeRequestedTimestamps([999], 120, 6, segs), null, "out of range -> null");
 });
 
 test("parseBlurMetadata：解析模糊分并选出最清晰帧", () => {
