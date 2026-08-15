@@ -12,6 +12,14 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# 登录凭证与临时二维码（敏感信息，严禁入库）
+.sessdata.json
+.qr-login.png
+.qr-login-debug.json
+
+# 环境体检缓存（运行时产物，不入库）
+.envcheck.json
+
 # 本地 ASR 模型与二进制（用户自行下载，不入库）
 ggml-*.bin
 *.onnx

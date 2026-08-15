@@ -6,7 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
 import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak, parseBlurMetadata, normalizeRequestedTimestamps } from "../lib/extractor.js";
-import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks } from "../lib/format.js";
+import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks, formatEnvironment, renderEnvReport } from "../lib/format.js";
+import { summarizeChecks, ASR_PROVIDERS } from "../lib/envcheck.js";
 
 const SUBTITLE_SEGS = [
   { start: 0, end: 5, text: "大家好今天聊聊" },
@@ -313,5 +314,61 @@ test("buildVisionRequest：分模型提示词进入请求体", () => {
   const bytes = Buffer.from("fakejpeg");
   const req = buildVisionRequest(bytes, { model: "moondream2", prompt: resolveVisionPrompt("moondream2", "", {}) });
   assert.ok(/citation: suitable/i.test(req.body.messages[0].content[0].text), "resolved prompt in body");
+});
+
+// —— 环境体检（envcheck / formatEnvironment / renderEnvReport）——
+
+test("summarizeChecks：各状态计数，未知状态忽略", () => {
+  const summary = summarizeChecks([
+    { status: "ok" }, { status: "ok" }, { status: "warn" }, { status: "missing" },
+    { status: "unreachable" }, { status: "info" }, { status: "error" }, { status: "bogus" },
+  ]);
+  assert.deepEqual(summary, { ok: 2, info: 1, warn: 1, missing: 1, unreachable: 1, error: 1 });
+  assert.deepEqual(summarizeChecks(null), { ok: 0, info: 0, warn: 0, missing: 0, unreachable: 0, error: 0 });
+});
+
+test("formatEnvironment：只列需要行动的项目，全部通过时一行带过", () => {
+  const env = {
+    checked_at: "2026-01-01T00:00:00.000Z",
+    summary: { ok: 1, warn: 1, missing: 1 },
+    checks: [
+      { id: "ffmpeg", label: "FFmpeg", status: "missing", detail: "未找到", hint: "安装指引" },
+      { id: "bcut", label: "必剪 ASR", status: "warn", detail: "受限", hint: "" },
+      { id: "bili-api", label: "B站主 API", status: "ok", detail: "可达", hint: "" },
+      { id: "credentials", label: "登录凭证", status: "info", detail: "未登录", hint: "可扫码" },
+    ],
+  };
+  const lines = formatEnvironment(env);
+  assert.ok(lines[0].includes("2 issue(s)"), "header counts actionable issues only");
+  assert.ok(lines.some((l) => l.includes("FFmpeg")), "missing listed");
+  assert.ok(lines.some((l) => l.includes("必剪 ASR")), "warn listed");
+  assert.ok(!lines.some((l) => l.includes("B站主 API")), "ok not listed");
+  assert.ok(!lines.some((l) => l.includes("登录凭证")), "info not listed in extraction digest");
+
+  const allOk = formatEnvironment({ checked_at: "x", checks: [{ id: "a", status: "ok" }] });
+  assert.ok(allOk[0].includes("all pass"), "all-pass header");
+  assert.ok(allOk[1].includes("全部通过"), "all-pass line");
+  assert.deepEqual(formatEnvironment(null), [], "no env -> empty section");
+});
+
+test("renderEnvReport：doctor 面向用户输出，含处理建议与状态中文名", () => {
+  const text = renderEnvReport({
+    checked_at: "2026-01-01T00:00:00.000Z",
+    summary: { ok: 1, missing: 1, info: 1 },
+    checks: [
+      { id: "ffmpeg", label: "FFmpeg", status: "missing", detail: "未找到", hint: "winget install Gyan.FFmpeg" },
+      { id: "credentials", label: "登录凭证", status: "info", detail: "未登录", hint: "可扫码登录" },
+      { id: "bili-api", label: "B站主 API", status: "ok", detail: "可达", hint: "" },
+    ],
+  });
+  assert.ok(text.includes("缺失"), "status rendered in Chinese");
+  assert.ok(text.includes("winget install Gyan.FFmpeg"), "hint shown");
+  assert.ok(text.includes("通过 1 项"), "summary line");
+  const allOk = renderEnvReport({ checked_at: "x", summary: { ok: 3 }, checks: [{ status: "ok" }] });
+  assert.ok(allOk.includes("全部检查通过"), "all-ok message");
+});
+
+test("ASR_PROVIDERS：与 extractor 行为一致的枚举", () => {
+  assert.deepEqual(ASR_PROVIDERS, ["bcut", "sherpa-onnx", "whisper-local", "auto", "none"]);
 });
 

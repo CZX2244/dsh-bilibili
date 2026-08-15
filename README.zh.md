@@ -37,7 +37,36 @@ dsh plugin --profile web add ./dsh-bilibili
 # 重启 web profile（dsh web），新会话中即可使用 bilibili_extract 工具
 ```
 
-安装后工具自动进入 Agent 的工具链：用户在对话里发 B 站链接（`bilibili.com/video/BV...`、`b23.tv` 短链或裸 BV 号），模型即可调用它分析。
+安装后工具自动进入 Agent 的工具链：用户在对话里发 B 站链接（`bilibili.com/video/BV...`、`b23.tv` 短链或裸 BV 号），模型即可调用它分析。插件同时注册 `bilibili_login` 工具（B站扫码登录）和 `bilibili_doctor` 工具（环境体检，见下）。
+
+---
+
+## 🩺 环境体检（首用自动排查）
+
+首次提取前，插件会自动做一次**三层环境排查**，报告缓存约 1 小时（相关配置变化自动失效）；缺什么才提示装什么，避免重复安装、二次下载与白付流量：
+
+| 层 | 检查项 | 出问题时的行为 |
+|---|---|---|
+| 本地依赖 | ffmpeg / whisper-cli / sherpa-onnx 二进制、模型与 tokens 文件、视觉服务端点、输出目录可写 | **ffmpeg 缺失 → 直接跳过视频下载与抓帧**（不再先下 800MB 再报 spawn 错误）；本地 ASR 未就绪 → **下载音频之前**跳过，不再白付下载/转码 |
+| 配置 | `asrProvider` 合法性、sherpa/whisper 必填项齐全性、visionBaseUrl 解析 | 非法/缺项标 `error`/`warn`，并给出补齐建议 |
+| 云端 | B站主 API、必剪 ASR、登录服务连通性；SESSDATA 有效性（nav `isLogin` 实测，而非只看文件存在） | 不可达/失效标 `unreachable`/`warn`；B站主 API 不可达时明确提示「插件整体不可用」（本地引擎的音频流同样来自 playurl 接口） |
+
+- 体检结果附在每次提取结果里（`Environment check` 段），有问题时 Agent 会把**处理建议**转达给用户；全部通过时一行带过；
+- `bilibili_doctor` 工具可随时手动复查，`refresh=true` 强制重检（安装/更新依赖或改配置后使用）；
+- 探针只做存在性/可达性检查：**不提交真实转写任务、不下载任何媒体**，单项失败只降级不阻塞提取；
+- 体检报告不含任何原始凭证（SESSDATA 只显示有效性）。
+
+---
+
+## 🔑 扫码登录（拿到需要登录的字幕文稿）
+
+部分视频的 AI 字幕轨需要登录才能读取（匿名请求返回 `need_login_subtitle`），登录后 `bilibili_extract` 能直接拿到**完整官方文稿**。三种方式：
+
+1. **聊天内扫码（推荐）**：对 AI 说「登录 B 站」，Agent 调用 `bilibili_login(action=start)` 生成二维码（聊天内直接显示，也可打开返回的本地图片 / 链接），用手机 B 站 App 扫码并点确认，再调 `action=poll` 等待结果。成功后 SESSDATA 自动保存到插件目录 `.sessdata.json`，**后续提取自动生效，无需重启**。
+2. **手动保存 Cookie**：浏览器开发者工具复制 `SESSDATA` 值，让 AI 调用 `bilibili_login(action=save, sessdata='...')`，或直接填到配置 `sessdata`（需重启 profile）。
+3. **退出登录**：`bilibili_login(action=logout)` 删除本地凭证；`action=status` 查看当前登录状态（SESSDATA 已脱敏显示）。
+
+> 安全提示：凭证以明文保存在插件目录 `.sessdata.json`（已加入 .gitignore）。SESSDATA 等同于账号登录态，请勿把该文件发给他人；不要直接在对话里粘贴完整 Cookie（工具输出与状态查询均只显示脱敏值）。
 
 ---
 
@@ -80,7 +109,7 @@ dsh plugin --profile web add ./dsh-bilibili
 - override:
     - id: bilibili
       config:
-        sessdata: ''                 # 可选，B站 SESSDATA（解锁登录态字幕/更多评论）
+        sessdata: ''                 # 可选，B站 SESSDATA；留空时自动读取 bilibili_login 保存的 .sessdata.json
         commentLimit: 20             # 评论抓取数量上限
         maxFrames: 6                 # 最大抓帧数
         extractFrames: true          # 是否抓帧（false = 纯文字模式）

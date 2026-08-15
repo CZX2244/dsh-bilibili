@@ -28,8 +28,15 @@ dsh-bilibili 本体以 [MIT](LICENSE) 许可发布。本插件**不打包、不�
 | SenseVoice / Paraformer | 阿里达摩院 FunASR（ModelScope / sherpa-onnx 发布） | Apache-2.0 |
 | Qwen3-VL 系列 / MiniCPM-V | 阿里通义 / 面壁智能（经 Ollama 或云端接口调用） | Apache-2.0 |
 
+## 登录流程实现参考
+
+| 项目 | 用途 | 许可证 |
+| --- | --- | --- |
+| Tsuk1ko/bilibili-qr-login | B 站扫码登录流程参考（passport 二维码 generate / poll 接口用法、状态码处理与 crossDomain 凭证解析方式） | [MIT](https://github.com/Tsuk1ko/bilibili-qr-login/blob/main/LICENSE) |
+
 ## 网络服务（非开源组件）
 
 - **Bilibili Web API**（api.bilibili.com、comment.bilibili.com 等）：元数据、字幕、评论、弹幕、音视频流。
 - **Bilibili 必剪（Bcut）ASR**：无字幕轨时的默认转写服务（B 站播放器「实时 AI 字幕」同款能力）。属 Bilibili 平台能力、匿名接口，存在限流与接口变更风险；返回文稿可能含识别错误。
 - **OpenAI 兼容视觉接口**（可选，`visionProvider: openai-compatible`）：如 OpenAI、智谱、硅基流动等第三方视觉服务，由用户自行配置地址与密钥。
+- **QR 码渲染服务**（api.qrserver.com，备用 api.liantu.com）：仅用于把 B 站登录链接渲染为二维码图片，便于在聊天界面直接展示扫码；离线时可直接打开返回的登录链接，用 B 站 App 扫码。

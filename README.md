@@ -37,7 +37,24 @@ dsh plugin --profile web add ./dsh-bilibili
 # Restart the web profile (dsh web); bilibili_extract becomes available in new sessions
 ```
 
-After installation the tool joins the agent's toolchain: when the user sends a Bilibili link (`bilibili.com/video/BV...`, a `b23.tv` short link, or a bare BV id), the model can call it for analysis.
+After installation the tool joins the agent's toolchain: when the user sends a Bilibili link (`bilibili.com/video/BV...`, a `b23.tv` short link, or a bare BV id), the model can call it for analysis. The plugin also registers `bilibili_login` (QR-code login) and `bilibili_doctor` (environment check, below).
+
+---
+
+## 🩺 Environment check (first-run probe)
+
+Before the first extraction the plugin runs a **three-layer environment probe** automatically; the report is cached for about an hour (invalidated when relevant config changes). It reports only what is missing, so nothing gets installed twice and no bandwidth is wasted:
+
+| Layer | Checks | Behavior on failure |
+|---|---|---|
+| Local dependencies | ffmpeg / whisper-cli / sherpa-onnx binaries, model and tokens files, vision endpoint, output dir writability | **ffmpeg missing → video download and frame capture are skipped** (no more 800 MB download before a raw spawn error); a not-ready local ASR engine is skipped **before** downloading the audio stream |
+| Config | `asrProvider` validity, sherpa/whisper required fields, visionBaseUrl resolution | Invalid/missing items are marked `error`/`warn` with fix hints |
+| Cloud | Bilibili main API, Bijian ASR, login service reachability; SESSDATA validity (verified via nav `isLogin`, not just file existence) | Unreachable/expired items are marked `unreachable`/`warn`; an unreachable Bilibili main API is flagged as "plugin unusable" (local ASR engines get their audio stream from playurl too) |
+
+- The report is attached to every extraction result (an `Environment check` section); the agent relays the fix hints to the user, or a single line when everything passes;
+- `bilibili_doctor` re-checks on demand; `refresh=true` forces a fresh probe (use after installing/updating dependencies or changing config);
+- Probes only check existence/reachability: no real ASR tasks are submitted and no media is downloaded; a failing check degrades, never blocks extraction;
+- The report never contains raw credentials (SESSDATA validity only).
 
 ---
 
