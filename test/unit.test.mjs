@@ -5,9 +5,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectKeyframeTimestamps, formatTime } from "../lib/keyframes.js";
-import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak, parseBlurMetadata, normalizeRequestedTimestamps } from "../lib/extractor.js";
+import { parseSubtitleBody, nearestSubtitleText, guessStreamExt, parseWhisperTime, parseWhisperJson, resolveWhisperModel, parseSherpaText, parseSherpaResults, buildWhisperArgs, buildSherpaArgs, resolveVisionModel, buildVisionRequest, parseChatCompletion, DEFAULT_VISION_PROMPT, resolveVisionBaseUrl, resolveVisionPrompt, parseCitationHint, VISION_PROMPT_SHORT, pickNearestPeak, parseBlurMetadata, normalizeRequestedTimestamps } from "../lib/extractor.js";
 import { formatExtraction, capTranscriptSmart, pickDanmakuPeaks, formatEnvironment, renderEnvReport } from "../lib/format.js";
 import { summarizeChecks, ASR_PROVIDERS } from "../lib/envcheck.js";
+import { readFileSync } from "node:fs";
 
 const SUBTITLE_SEGS = [
   { start: 0, end: 5, text: "大家好今天聊聊" },
@@ -29,9 +30,9 @@ test("自动选帧：场景峰保留 + 排序 + 封顶", () => {
   }
 });
 
-test("自动选帧：均匀补齐", () => {
+test("自动选帧：补齐（有场景峰时按空档补）", () => {
   const plan = selectKeyframeTimestamps(SUBTITLE_SEGS, 120, 5, SCENE_PEAKS);
-  assert.ok(plan.some((p) => p.reason.includes("even")), "backfill present");
+  assert.ok(plan.some((p) => p.reason === "gap backfill"), "backfill present");
 });
 
 test("自动选帧：不做关键词猜测（语义判断交给主 Agent）", () => {
@@ -372,3 +373,61 @@ test("ASR_PROVIDERS：与 extractor 行为一致的枚举", () => {
   assert.deepEqual(ASR_PROVIDERS, ["bcut", "sherpa-onnx", "whisper-local", "auto", "none"]);
 });
 
+
+test("自动选帧：场景峰多于上限时分散到全片，而不是挤在片头", () => {
+  const peaks = Array.from({ length: 40 }, (_, i) => ({ time: 3 + i * 7, reason: "scene change", text: "" }));
+  const plan = selectKeyframeTimestamps([], 1200, 6, peaks);
+  assert.equal(plan.length, 6);
+  assert.ok(plan.filter((p) => p.time < 60).length <= 1, "at most one frame in the first minute");
+  assert.ok(plan[plan.length - 1].time > 900, "last frame reaches the end of the video");
+});
+
+test("自动选帧：有场景峰时按最大空档补齐", () => {
+  const plan = selectKeyframeTimestamps([], 600, 4, [{ time: 20, reason: "scene change", text: "" }]);
+  assert.equal(plan.length, 4);
+  assert.ok(plan.some((p) => p.reason === "gap backfill"));
+  assert.ok(plan[plan.length - 1].time > 400, "backfill covers the tail");
+});
+
+test("buildWhisperArgs：-oj 搭配 -of，JSON 写到文件而不是 stdout", () => {
+  const args = buildWhisperArgs({ modelPath: "m.bin", language: "zh", wavPath: "a.wav", outBase: "/tmp/x/whisper", threads: 4 });
+  assert.deepEqual(args, ["-m", "m.bin", "-l", "zh", "-oj", "-of", "/tmp/x/whisper", "-np", "-f", "a.wav", "-t", "4"]);
+  assert.ok(!buildWhisperArgs({ modelPath: "m", language: "zh", wavPath: "a", outBase: "o" }).includes("-t"));
+});
+
+test("buildSherpaArgs：按模型类型选 flag，wav 作为位置参数", () => {
+  assert.deepEqual(
+    buildSherpaArgs({ modelType: "sense-voice", model: "model.onnx", tokens: "tokens.txt", threads: 2, wavPaths: ["c0.wav", "c1.wav"] }),
+    ["--sense-voice-model=model.onnx", "--tokens=tokens.txt", "--num-threads=2", "c0.wav", "c1.wav"],
+  );
+  assert.equal(buildSherpaArgs({ modelType: "paraformer", model: "p.onnx", tokens: "t", wavPaths: ["a.wav"] })[0], "--paraformer=p.onnx");
+  assert.equal(buildSherpaArgs({ modelType: "zipformer2-ctc", model: "z.onnx", tokens: "t", wavPaths: ["a.wav"] })[0], "--zipformer-ctc-model=z.onnx");
+  assert.throws(() => buildSherpaArgs({ modelType: "bogus", model: "m", tokens: "t", wavPaths: [] }), /unsupported sherpaModelType/);
+});
+
+test("parseSherpaResults：逐块 JSON 结果 → 带偏移的句段", () => {
+  const stdout = [
+    JSON.stringify({ lang: "<|zh|>", text: "大家好。今天", timestamps: [0.1, 0.3, 0.5, 0.6, 2.0, 2.2], tokens: ["大", "家", "好", "。", "今", "天"] }),
+    JSON.stringify({ text: "第二块", timestamps: [1.0, 1.2, 1.4], tokens: ["第", "二", "块"] }),
+    JSON.stringify({ text: "没有时间戳", timestamps: [], tokens: [] }),
+  ].join("\n");
+  const segs = parseSherpaResults(stdout, 30);
+  assert.deepEqual(segs.map((s) => s.text), ["大家好。", "今天", "第二块", "没有时间戳"]);
+  assert.equal(segs[0].start, 0.1);
+  assert.equal(segs[2].start, 31, "second chunk offset by 30s");
+  assert.equal(segs[3].start, 60, "untimed chunk falls back to its chunk window");
+  assert.deepEqual(parseSherpaResults("Done!\nnot json"), []);
+});
+
+test("parseSherpaResults：BPE 词首符号转空格、特殊标签去掉", () => {
+  const stdout = JSON.stringify({ text: "hello world", timestamps: [0, 0.2, 0.4], tokens: ["<|en|>", "\u2581hello", "\u2581world"] });
+  assert.deepEqual(parseSherpaResults(stdout).map((s) => s.text), ["hello world"]);
+});
+
+test("DSH 兼容：engines.dsh 覆盖 0.2.x，系统提示段落关闭插值", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(typeof pkg.engines?.dsh, "string");
+  assert.ok(pkg.engines.dsh.includes("<0.3.0-0"));
+  const index = readFileSync(new URL("../lib/index.js", import.meta.url), "utf8");
+  assert.ok(index.includes("interpolate: false"), "user template must not go through strict {{}} interpolation");
+});
