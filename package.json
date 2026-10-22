@@ -1,6 +1,6 @@
 {
   "name": "dsh-bilibili",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "description": "DeepSeek Harness tool plugin: analyze Bilibili videos — transcript first, subtitle-driven keyframes, model summaries",
   "type": "module",
   "main": "lib/index.js",
@@ -18,10 +18,16 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "engines": {
+    "dsh": ">=0.1.0-rc.6 <0.3.0-0"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.6 <0.3.0-0",
     "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   },
   "keywords": [
     "deepseek-harness",

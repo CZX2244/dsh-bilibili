@@ -14,7 +14,7 @@ DeepSeek Harness 工具插件：给 Agent 添加 `bilibili_extract` 工具。发
 
 - **文字信息全量提取**：元数据、完整字幕文稿（带时间戳，长文稿截断保留全文时间索引）、热门评论（含楼中楼）、弹幕（高频 + **密度峰时间线样本**，片头弹幕不霸榜）；**无字幕轨的视频默认用必剪 ASR 转写**（B站播放器「实时AI字幕」同款能力，匿名可用，24h 缓存），也可切换到本地引擎——**sherpa-onnx（中文推荐，SenseVoice）** 或 **whisper.cpp**（通用），离线可用、适配不同配置；单个信息源失败不影响整体（各自降级为空并带 note）；
 - **可选帧图视觉描述**：无视觉能力的主模型也能「看到」画面——帧图可交给本地 **Ollama / llama.cpp**（Qwen3-VL 2B/4B/8B 三档）或任意 OpenAI 兼容视觉接口转成文字描述，报告按需引用配图；
-- **自动选帧（纯画面信号）**：场景切换检测（>20 分钟自动切抽样式）+ 均匀间隔兜底，5 秒去重；**不做关键词猜测**——判断「文稿哪里不完整、必须看画面」是语义分析，交给主 Agent 的两段式提示词完成；
+- **自动选帧（纯画面信号）**：场景切换检测（>20 分钟自动切抽样式），按时间分桶分散到全片，再按最大空档补齐，5 秒去重；**不做关键词猜测**——判断「文稿哪里不完整、必须看画面」是语义分析，交给主 Agent 的两段式提示词完成；
 - **清晰帧优选**：抓帧时在目标时间点 ±1.5s 内用 FFmpeg `blurdetect` 逐帧测模糊度，**自动选最清晰的那一帧**——动画入场、运动模糊、淡入淡出的糊帧会被跳过；
 - **两段式工作流**：模型先读文稿（秒级、零下载），再带 `timestamps` 定向抓帧——每帧自动配附近字幕，视频 24h 缓存复用，多轮迭代不重复下载；模型以「`[建议抓帧] mm:ss`」固定格式显式回报需要画面的时刻；
 - **输出模板可替换**：内置简洁总结模板（省时 + 可转发），`summaryTemplate` 配置可指向任意自定义模板文件；
@@ -27,6 +27,8 @@ DeepSeek Harness 工具插件：给 Agent 添加 `bilibili_extract` 工具。发
 
 前置：Node 18+、`ffmpeg` 在 PATH 中、`pnpm`。
 
+**兼容性**：DeepSeek Harness `>=0.1.0-rc.6 <0.3.0`（以 `engines.dsh` 声明）。DSH 在安装和 profile 启动时都会检查这个范围，不覆盖当前 DSH 版本的插件会被拒绝安装或被静默跳过——v0.7.x 及更早版本在 DSH 0.2.x 上已无法加载，请升级到 v0.8.0+。
+
 ```sh
 # 方式一：从 GitHub 安装（推荐）
 dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
@@ -35,6 +37,13 @@ dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
 dsh plugin --profile web add ./dsh-bilibili
 
 # 重启 web profile（dsh web），新会话中即可使用 bilibili_extract 工具
+```
+
+**升级插件**：开启 HMR（官方 profile 默认开启）时，DSH 拒绝在已安装的包上覆盖安装（`already-installed`），需先移除再安装：
+
+```sh
+dsh plugin --profile web remove dsh-bilibili
+dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
 ```
 
 安装后工具自动进入 Agent 的工具链：用户在对话里发 B 站链接（`bilibili.com/video/BV...`、`b23.tv` 短链或裸 BV 号），模型即可调用它分析。插件同时注册 `bilibili_login` 工具（B站扫码登录）和 `bilibili_doctor` 工具（环境体检，见下）。
@@ -62,7 +71,7 @@ dsh plugin --profile web add ./dsh-bilibili
 
 部分视频的 AI 字幕轨需要登录才能读取（匿名请求返回 `need_login_subtitle`），登录后 `bilibili_extract` 能直接拿到**完整官方文稿**。三种方式：
 
-1. **聊天内扫码（推荐）**：对 AI 说「登录 B 站」，Agent 调用 `bilibili_login(action=start)` 生成二维码（聊天内直接显示，也可打开返回的本地图片 / 链接），用手机 B 站 App 扫码并点确认，再调 `action=poll` 等待结果。成功后 SESSDATA 自动保存到插件目录 `.sessdata.json`，**后续提取自动生效，无需重启**。
+1. **聊天内扫码（推荐）**：对 AI 说「登录 B 站」，Agent 调用 `bilibili_login(action=start)` 生成二维码（**本地生成**：聊天内显示字符二维码，也可打开返回的本地 PNG；登录链接含会话 key，绝不发给第三方二维码服务），用手机 B 站 App 扫码并点确认，再调 `action=poll` 等待结果。成功后 SESSDATA 自动保存到插件目录 `.sessdata.json`（仅本人可读，0600），**后续提取自动生效，无需重启**。
 2. **手动保存 Cookie**：浏览器开发者工具复制 `SESSDATA` 值，让 AI 调用 `bilibili_login(action=save, sessdata='...')`，或直接填到配置 `sessdata`（需重启 profile）。
 3. **退出登录**：`bilibili_login(action=logout)` 删除本地凭证；`action=status` 查看当前登录状态（SESSDATA 已脱敏显示）。
 
@@ -78,6 +87,7 @@ dsh plugin --profile web add ./dsh-bilibili
 - **内置备选**：`templates/timeline.md` —— 通用时间轴式（主标题 → 开场钩子 → 时间轴分段小标题 + 内嵌时间戳要点 → 配图锚点 → 结尾结论），配图能配就配、配不了不强凑；
 - **换模板**：在配置里设 `summaryTemplate: 'C:/path/我的模板.md'`，指向你自己的模板文件；
 - **改默认**：直接编辑插件目录里的 `templates/summary.md`；
+- 模板会**原样**拼进系统提示——模板里写 `{{占位符}}` 也没问题（该段落已关闭 DSH 的严格提示词变量插值）；
 - **无效路径自动回退**内置模板，工具永不因模板问题失效。
 
 如需更丰富的输出格式（学习笔记/评测表/时间线/复习卡等），可安装配套技能 `bilibili-video-analyzer`（A-K 格式目录），Agent 会按用户需求选用。
@@ -95,7 +105,7 @@ dsh plugin --profile web add ./dsh-bilibili
 ④ 依据帧的 description/citation_hint（或 read_image）判断报告里引用哪些图
 ```
 
-> 兜底：**单次调用**（不传 `timestamps`）时，插件才用自动选帧——纯画面信号：场景切换（>20 分钟抽样式）+ 均匀间隔。这是给「模型没走两段式」时的保险，不包含任何关键词猜测。
+> 兜底：**单次调用**（不传 `timestamps`）时，插件才用自动选帧——纯画面信号：场景切换（>20 分钟抽样式），按等长时间桶各取一个峰值（片头密集剪辑不会占满名额），再按最大空档补齐。这是给「模型没走两段式」时的保险，不包含任何关键词猜测。
 
 > 精度说明：帧实际时间与请求时间可能存在最多约 ±0.5s 偏差（快速 seek 依赖关键帧间隔），叠加场景对齐与清晰帧精修后偏差更大——精确时刻以报告中的「原始请求」标注为准。
 
@@ -176,7 +186,7 @@ B 站以中文内容为主，SenseVoice 的中文识别率明显高于 Whisper�
 2. 下载对应档位的 `ggml-*.bin` 模型，放到 `models/` 目录；
 3. 配置里设 `asrProvider: 'whisper-local'` 并填 `whisperBin` / `whisperModel`。
 
-> 提示：`asrProvider: 'auto'` 会按「必剪 → sherpa-onnx → whisper-local」依次降级；中文内容建议至少 `medium`（whisper）或直接选 SenseVoice（sherpa）。sherpa-onnx 的 CLI 参数随版本略有差异，如遇报错请以你所用版本的 `--help` 为准调整。
+> 提示：`asrProvider: 'auto'` 会按「必剪 → sherpa-onnx → whisper-local」依次降级；中文内容建议至少 `medium`（whisper）或直接选 SenseVoice（sherpa）。插件按 `sherpaModelType` 用 `--sense-voice-model` / `--paraformer` / `--zipformer-ctc-model` 调用 `sherpa-onnx-offline`，先把音频切成 30 秒的 16kHz WAV 块（非流式模型一次处理整段长音频效果很差），再解析 stdout 里逐块输出的 JSON 结果；whisper-cli 以 `-oj -of` 调用并读取其输出的 JSON 文件。
 
 ### 🔍 帧图视觉描述（可选）
 

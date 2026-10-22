@@ -14,7 +14,7 @@ A DeepSeek Harness tool plugin that gives agents a `bilibili_extract` tool. Send
 
 - **Full text extraction**: metadata, complete timestamped transcript (long transcripts are truncated with a full-text time index), hot comments (with replies), danmaku (top repeated messages + **density-peak timeline samples** — opening spam no longer dominates); **videos without a subtitle track are auto-transcribed** — Bijian ASR by default (the same anonymous capability behind Bilibili's "live AI subtitles", 24h cache), or switch to local engines — **sherpa-onnx (Chinese, SenseVoice)** or **whisper.cpp** — fully offline; one failing source never breaks the rest (each degrades to empty with a note);
 - **Optional frame vision descriptions**: vision-less main models can still "see" frames — send each frame to a local **Ollama / llama.cpp** backend (Qwen3-VL 2B/4B/8B tiers) or any OpenAI-compatible vision API for a text description; the report cites images only when needed;
-- **Automatic frame selection (picture-driven only)**: scene-change detection (sampled pass beyond 20 minutes) + even-interval backfill, 5s dedupe; **no keyword guessing** — deciding "which transcript moments are incomplete and need visuals" is semantic analysis, left to the main agent's two-pass prompts;
+- **Automatic frame selection (picture-driven only)**: scene-change detection (sampled pass beyond 20 minutes), spread across the whole video, with largest-gap backfill, 5s dedupe; **no keyword guessing** — deciding "which transcript moments are incomplete and need visuals" is semantic analysis, left to the main agent's two-pass prompts;
 - **Sharp-frame preference**: within ±1.5s of each target time, FFmpeg `blurdetect` scores every frame and the **sharpest one wins** — motion-blurred animation entrances and fade frames are skipped;
 - **Two-pass workflow**: the agent reads the transcript first (instant, zero download), then requests frames with explicit `timestamps` — each frame is captioned with its nearby subtitle; the agent reports needed moments in a fixed `[建议抓帧] mm:ss` format; 24h video cache reuse across passes;
 - **Replaceable output template**: a concise shareable summary template is bundled; `summaryTemplate` can point to any custom template file;
@@ -27,6 +27,8 @@ A DeepSeek Harness tool plugin that gives agents a `bilibili_extract` tool. Send
 
 Prerequisites: Node 18+, `ffmpeg` on PATH, `pnpm`.
 
+**Compatibility**: DeepSeek Harness `>=0.1.0-rc.6 <0.3.0` (declared as `engines.dsh`). DSH checks this range at install time and at profile startup; a plugin whose range does not cover the running DSH is refused or silently skipped, so v0.7.x and earlier no longer load on DSH 0.2.x — upgrade to v0.8.0+.
+
 ```sh
 # Option 1: install from GitHub (recommended)
 dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
@@ -37,7 +39,16 @@ dsh plugin --profile web add ./dsh-bilibili
 # Restart the web profile (dsh web); bilibili_extract becomes available in new sessions
 ```
 
+**Upgrading**: with HMR (on in the shipped profiles) DSH refuses to install over an installed package (`already-installed`). Remove it first, then add again:
+
+```sh
+dsh plugin --profile web remove dsh-bilibili
+dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
+```
+
 After installation the tool joins the agent's toolchain: when the user sends a Bilibili link (`bilibili.com/video/BV...`, a `b23.tv` short link, or a bare BV id), the model can call it for analysis. The plugin also registers `bilibili_login` (QR-code login) and `bilibili_doctor` (environment check, below).
+
+The login QR code is rendered **locally** (as a text QR in chat plus a local PNG): the login URL carries the session key, so it is never sent to a third-party QR image service. Stored credentials (`.sessdata.json`) are owner-only (0600).
 
 ---
 
@@ -66,6 +77,7 @@ The output format is a **replaceable part** of the plugin: the tool provides the
 - **Bundled alternative**: `templates/timeline.md` — a generic time-axis format (title → hook → timestamped sections with inline points → image anchors → conclusion); add images only when they help, never force them;
 - **Switch templates**: set `summaryTemplate: 'C:/path/my-template.md'` in the config;
 - **Change the default**: edit `templates/summary.md` directly in the plugin directory;
+- Templates are inserted into the system prompt **literally** — `{{placeholders}}` in your template are safe (DSH's strict prompt-variable interpolation is turned off for this section);
 - An invalid custom path falls back to the bundled template, so the tool never breaks because of a template.
 
 For richer output formats (study notes, review tables, timelines, Q&A cards, etc.), install the companion skill `bilibili-video-analyzer` (an A–K format catalog) and the agent picks by user intent.
@@ -85,7 +97,7 @@ For richer output formats (study notes, review tables, timelines, Q&A cards, etc
 ④ the agent decides which images to cite in the report using description/citation_hint (or read_image)
 ```
 
-> Fallback: only a **single call** (no `timestamps`) uses automatic selection — purely picture-driven: scene changes (sampled pass beyond 20 min) + even-interval backfill. That's insurance for "the model skipped the two-pass flow", with no keyword guessing.
+> Fallback: only a **single call** (no `timestamps`) uses automatic selection — purely picture-driven: scene changes (sampled pass beyond 20 min), picked one per equal time bucket so a cut-heavy intro cannot take every slot, then the largest remaining gaps are backfilled. That's insurance for "the model skipped the two-pass flow", with no keyword guessing.
 
 > Precision note: captured frame times may differ from the requested time by up to about ±0.5s (fast seek depends on keyframe spacing), and more after scene alignment and sharp-frame refinement — the exact requested moment is shown per frame as `原始请求` in the report.
 
@@ -166,7 +178,7 @@ Steps:
 2. Download the matching `ggml-*.bin` model into a `models/` directory;
 3. Set `asrProvider: 'whisper-local'` and fill `whisperBin` / `whisperModel`.
 
-> Note: `asrProvider: 'auto'` falls back in order Bijian → sherpa-onnx → whisper-local. For Chinese, use at least `medium` (whisper) or pick SenseVoice (sherpa) directly. sherpa-onnx CLI flags vary slightly across versions — check `--help` of your build if something errors.
+> Note: `asrProvider: 'auto'` falls back in order Bijian → sherpa-onnx → whisper-local. For Chinese, use at least `medium` (whisper) or pick SenseVoice (sherpa) directly. The plugin calls `sherpa-onnx-offline` with `--sense-voice-model` / `--paraformer` / `--zipformer-ctc-model` (by `sherpaModelType`), splits the audio into 30-second 16 kHz WAV chunks (non-streaming models do poorly on long audio in one piece), and parses the per-chunk JSON results from stdout; whisper-cli is called with `-oj -of` and its JSON output file is read.
 
 ### 🔍 Frame vision descriptions (optional)
 
