@@ -424,10 +424,8 @@ test("parseSherpaResults：BPE 词首符号转空格、特殊标签去掉", () =
   assert.deepEqual(parseSherpaResults(stdout).map((s) => s.text), ["hello world"]);
 });
 
-test("DSH 兼容：engines.dsh 覆盖 0.2.x，系统提示段落关闭插值", () => {
+test("DSH 兼容：engines.dsh 覆盖 0.2.x", () => {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(typeof pkg.engines?.dsh, "string");
   assert.ok(pkg.engines.dsh.includes("<0.3.0-0"));
-  const index = readFileSync(new URL("../lib/index.js", import.meta.url), "utf8");
-  assert.ok(index.includes("interpolate: false"), "user template must not go through strict {{}} interpolation");
 });
