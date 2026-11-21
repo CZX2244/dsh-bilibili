@@ -71,11 +71,13 @@ dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
 
 部分视频的 AI 字幕轨需要登录才能读取（匿名请求返回 `need_login_subtitle`），登录后 `bilibili_extract` 能直接拿到**完整官方文稿**。三种方式：
 
-1. **聊天内扫码（推荐）**：对 AI 说「登录 B 站」，Agent 调用 `bilibili_login(action=start)` 生成二维码（**本地生成**：聊天内显示字符二维码，也可打开返回的本地 PNG；登录链接含会话 key，绝不发给第三方二维码服务），用手机 B 站 App 扫码并点确认，再调 `action=poll` 等待结果。成功后 SESSDATA 自动保存到插件目录 `.sessdata.json`（仅本人可读，0600），**后续提取自动生效，无需重启**。
+1. **聊天内扫码（推荐）**：对 AI 说「登录 B 站」，Agent 调用 `bilibili_login(action=start)` 生成二维码（**本地生成**：聊天内显示字符二维码，也可打开返回的本地 PNG；登录链接含会话 key，绝不发给第三方二维码服务），用手机 B 站 App 扫码并点确认，再调 `action=poll` 等待结果。成功后 SESSDATA 自动保存到 `<DSH_HOME>/bili-credentials.json`（仅本人可读，0600），**后续提取自动生效，无需重启**。
 2. **手动保存 Cookie**：浏览器开发者工具复制 `SESSDATA` 值，让 AI 调用 `bilibili_login(action=save, sessdata='...')`，或直接填到配置 `sessdata`（需重启 profile）。
 3. **退出登录**：`bilibili_login(action=logout)` 删除本地凭证；`action=status` 查看当前登录状态（SESSDATA 已脱敏显示）。
 
-> 安全提示：凭证以明文保存在插件目录 `.sessdata.json`（已加入 .gitignore）。SESSDATA 等同于账号登录态，请勿把该文件发给他人；不要直接在对话里粘贴完整 Cookie（工具输出与状态查询均只显示脱敏值）。
+> 安全提示：凭证以明文保存在 `<DSH_HOME>/bili-credentials.json`（已加入 .gitignore）。SESSDATA 等同于账号登录态，请勿把该文件发给他人；不要直接在对话里粘贴完整 Cookie（工具输出与状态查询均只显示脱敏值）。
+>
+> 凭证**刻意放在插件目录之外**：插件目录在每次安装/同步时会被清空重建，写在里面的东西每次更新都会丢。旧版本遗留的 `<插件目录>/.sessdata.json` 仍会被读取作为兜底，两处都有时按 `saved_at` 取最新。
 
 ---
 
@@ -119,7 +121,7 @@ dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
 - override:
     - id: bilibili
       config:
-        sessdata: ''                 # 可选，B站 SESSDATA；留空时自动读取 bilibili_login 保存的 .sessdata.json
+        sessdata: ''                 # 可选，B站 SESSDATA；留空时自动读取 bilibili_login 保存的 <DSH_HOME>/bili-credentials.json
         commentLimit: 20             # 评论抓取数量上限
         maxFrames: 6                 # 最大抓帧数
         extractFrames: true          # 是否抓帧（false = 纯文字模式）

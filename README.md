@@ -48,7 +48,7 @@ dsh plugin --profile web add git+https://github.com/CZX2244/dsh-bilibili
 
 After installation the tool joins the agent's toolchain: when the user sends a Bilibili link (`bilibili.com/video/BV...`, a `b23.tv` short link, or a bare BV id), the model can call it for analysis. The plugin also registers `bilibili_login` (QR-code login) and `bilibili_doctor` (environment check, below).
 
-The login QR code is rendered **locally** (as a text QR in chat plus a local PNG): the login URL carries the session key, so it is never sent to a third-party QR image service. Stored credentials (`.sessdata.json`) are owner-only (0600).
+The login QR code is rendered **locally** (as a text QR in chat plus a local PNG): the login URL carries the session key, so it is never sent to a third-party QR image service. Stored credentials (`<DSH_HOME>/bili-credentials.json`) are owner-only (0600) and deliberately live outside the plugin directory, which is wiped and recreated on every install/sync.
 
 ---
 
